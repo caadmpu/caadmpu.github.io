@@ -283,8 +283,11 @@ const app = {
     async carregarDemandas() {
         const showArchived = document.getElementById('filter-arquivadas').checked;
         try {
-            const snap = await db.collection('demandas').where('arquivada', '==', showArchived).get();
+            const snap = await db.collection('demandas').get();
             let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            // Filtra no frontend para não perder demandas antigas sem o campo "arquivada"
+            demandas = demandas.filter(d => !!d.arquivada === showArchived);
             
             demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
             
