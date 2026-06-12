@@ -46,48 +46,57 @@ const app = {
         document.getElementById('globalModal').addEventListener('click', (e) => {
             if (e.target.id === 'globalModal') this.closeModal();
         });
-
+        
         // Monitora o status de login via Firebase Auth
         auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                // Busca as permissões pelo UID
-                const doc = await db.collection('usuarios').doc(user.uid).get();
-                if(doc.exists) {
-                    this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
-                    this.showApp();
+            try {
+                if (user) {
+                    // Busca as permissões pelo UID
+                    const doc = await db.collection('usuarios').doc(user.uid).get();
+                    if(doc.exists) {
+                        this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
+                        this.showApp();
+                    } else {
+                        // Se não existe pelo UID, procura se o Admin pré-autorizou o e-mail
+                        const snap = await db.collection('usuarios').where('email', '==', user.email).get();
+                        
+                        if (snap.empty && user.email !== 'admin@admin.com') {
+                            // Não está na whitelist!
+                            await auth.signOut();
+                            document.getElementById('login_error').innerText = "Acesso Negado: Sua conta Google não foi autorizada pelo Administrador.";
+                            this.showLogin();
+                            return;
+                        }
+
+                        // Está na whitelist! Migra os dados pré-cadastrados para o UID correto definitivo.
+                        let newUserDoc = {
+                            login: user.displayName || user.email.split('@')[0],
+                            email: user.email, 
+                            role: 'COMUM', 
+                            permissoes: {}
+                        };
+
+                        if(!snap.empty) {
+                            const prData = snap.docs[0].data();
+                            newUserDoc.role = prData.role || 'COMUM';
+                            newUserDoc.permissoes = prData.permissoes || {};
+                            await db.collection('usuarios').doc(snap.docs[0].id).delete();
+                        } else if (user.email === 'admin@admin.com') {
+                            newUserDoc.role = 'ADM';
+                        }
+
+                        await db.collection('usuarios').doc(user.uid).set(newUserDoc);
+                        this.userDoc = { uid: user.uid, ...newUserDoc };
+                        this.showApp();
+                    }
                 } else {
-                    // Se não existe pelo UID, procura se o Admin pré-autorizou o e-mail
-                    const snap = await db.collection('usuarios').where('email', '==', user.email).get();
-                    
-                    if (snap.empty && user.email !== 'admin@admin.com') {
-                        // Não está na whitelist!
-                        await auth.signOut();
-                        document.getElementById('login_error').innerText = "Acesso Negado: Sua conta Google não foi autorizada pelo Administrador.";
-                        this.showLogin();
-                        return;
-                    }
-
-                    // Está na whitelist! Migra os dados pré-cadastrados para o UID correto definitivo.
-                    let newUserDoc = {
-                        login: user.displayName || user.email.split('@')[0],
-                        email: user.email, 
-                        role: 'COMUM', 
-                        permissoes: {}
-                    };
-
-                    if (!snap.empty) {
-                        const preAuthDoc = snap.docs[0];
-                        newUserDoc = preAuthDoc.data();
-                        await db.collection('usuarios').doc(preAuthDoc.id).delete(); // Remove o registro temporário sem UID
-                    }
-
-                    await db.collection('usuarios').doc(user.uid).set(newUserDoc);
-                    this.userDoc = { uid: user.uid, ...newUserDoc };
-                    this.showApp();
+                    this.userDoc = null;
+                    this.showLogin();
                 }
-            } else {
-                this.userDoc = null;
-                this.showLogin();
+            } catch (err) {
+                alert("Erro crítico no login: " + err.message + "\n\nStack: " + err.stack);
+                console.error(err);
+                document.getElementById('login_error').innerText = "Erro Crítico: " + err.message;
             }
         });
     },
