@@ -32,6 +32,11 @@ const app = {
     calendar: null,
     kanbanSortables: [],
     userDoc: null,
+    demandasFiltradas: [],
+    pagination: {
+        currentPage: 1,
+        itemsPerPage: 10
+    },
 
     init() {
         this.bindNav();
@@ -167,6 +172,14 @@ const app = {
     loadView(view) {
         // Bloqueia visão de usuários se não for ADM
         if (view === 'usuarios' && (!this.userDoc || this.userDoc.role !== 'ADM')) return;
+        
+        // Bloqueia telas com base nas novas permissões
+        if (view === 'demandas' && !this.temPermissao('visualizar_demandas')) {
+            return alert("Sem permissão para visualizar demandas.");
+        }
+        if (view === 'cadastros' && !this.temPermissao('gerenciar_cadastros')) {
+            return alert("Sem permissão para visualizar cadastros.");
+        }
 
         this.currentView = view;
         const container = document.getElementById('contentArea');
@@ -193,7 +206,11 @@ const app = {
 
     // --- DASHBOARD ---
     async initDashboard() {
-        const snap = await db.collection('demandas').get();
+        let query = db.collection('demandas');
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+        }
+        const snap = await query.get();
         const demandas = snap.docs.map(d => d.data());
         
         let finalizadas = 0, andamento = 0, arquivadas = 0;
@@ -296,19 +313,27 @@ const app = {
             const snap = await db.collection('demandas').get();
             let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
-            // Filtra no frontend para não perder demandas antigas sem o campo "arquivada"
-            demandas = demandas.filter(d => {
-                let isArq = false;
-                if (d.arquivada === true || d.arquivada === 'true' || d.arquivada === 'sim') isArq = true;
-                return isArq === showArchived;
+        try {
+            document.body.style.cursor = 'wait';
+            let query = db.collection('demandas');
+            if(!document.getElementById('filter-arquivadas').checked) {
+                query = query.where('arquivada', '==', false);
+            }
+            const snap = await query.get();
+            let demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            // Ordena mais recentes primeiro
+            demandas.sort((a, b) => {
+                const dateA = new Date(a.data_registro || 0);
+                const dateB = new Date(b.data_registro || 0);
+                return dateB - dateA;
             });
             
-            demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
-            
             window.todasDemandas = demandas;
-            
-            this.renderTabelaDemandas(window.todasDemandas);
+            this.filtrarTabelaDemandas();
+            document.body.style.cursor = 'default';
         } catch(e) {
+            document.body.style.cursor = 'default';
             console.error("Erro ao carregar demandas:", e);
         }
     },
@@ -350,17 +375,17 @@ const app = {
                 <td>${d.coordenadoria_nome || '-'}</td>
                 <td>${d.escola_nome || '-'}</td>
                 <td>${d.tipo_nome || '-'}</td>
-                <td><span class="badge badge-${cssStatus}">${d.status_nome || '-'}</span></td>
+                <td>${d.status_nome ? `<span class="badge badge-${cssStatus}">${d.status_nome}</span>` : '-'}</td>
                 <td>${d.funcionario_nome || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
-                    <button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>
-                    ${d.arquivada 
+                    ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
+                    ${this.temPermissao('editar_demandas') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>` : ''}
+                    ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
+                    ${this.temPermissao('imprimir_demandas') ? `<button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>` : ''}
+                    ${this.temPermissao('arquivar_demandas') ? (d.arquivada 
                         ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
                         : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
-                    }
+                    ) : ''}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -381,7 +406,7 @@ const app = {
         const status = document.getElementById('filter-status').value;
         const coord = document.getElementById('filter-coordenadoria').value;
         
-        const filtradas = window.todasDemandas.filter(d => {
+        let filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
             const matchProc = comProc ? !!(d.processo_siged && d.processo_siged.trim() !== '') : true;
             const matchEscola = escola ? d.escola_nome === escola : true;
@@ -390,7 +415,72 @@ const app = {
             const matchCoord = coord ? d.coordenadoria_nome === coord : true;
             return matchTerm && matchProc && matchEscola && matchTipo && matchStatus && matchCoord;
         });
-        this.renderTabelaDemandas(filtradas);
+        
+        if (this.userDoc && this.userDoc.role === 'COMUM') {
+            filtradas = filtradas.filter(d => d.coordenadoria_nome === this.userDoc.coordenadoria_nome);
+        }
+
+        this.demandasFiltradas = filtradas;
+        this.pagination.currentPage = 1;
+        this.renderPaginatedTabela();
+    },
+
+    changeItemsPerPage(val) {
+        this.pagination.itemsPerPage = parseInt(val);
+        this.pagination.currentPage = 1;
+        this.renderPaginatedTabela();
+    },
+    
+    changePage(page) {
+        this.pagination.currentPage = page;
+        this.renderPaginatedTabela();
+    },
+    
+    renderPaginatedTabela() {
+        const total = this.demandasFiltradas.length;
+        const totalPages = Math.ceil(total / this.pagination.itemsPerPage) || 1;
+        
+        if (this.pagination.currentPage > totalPages) this.pagination.currentPage = totalPages;
+        if (this.pagination.currentPage < 1) this.pagination.currentPage = 1;
+        
+        const start = (this.pagination.currentPage - 1) * this.pagination.itemsPerPage;
+        const paged = this.demandasFiltradas.slice(start, start + this.pagination.itemsPerPage);
+        
+        this.renderTabelaDemandas(paged);
+        this.renderPaginationControls(totalPages);
+    },
+    
+    renderPaginationControls(totalPages) {
+        const container = document.getElementById('pagination-buttons');
+        if (!container) return;
+        
+        if (totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        let html = '';
+        const cur = this.pagination.currentPage;
+        
+        html += `<button class="btn btn-sm ${cur === 1 ? 'btn-secondary disabled' : 'btn-primary'}" ${cur === 1 ? 'disabled' : ''} onclick="app.changePage(1)">&lt;&lt; Primeiro</button>`;
+        html += `<button class="btn btn-sm ${cur === 1 ? 'btn-secondary disabled' : 'btn-primary'}" ${cur === 1 ? 'disabled' : ''} onclick="app.changePage(${cur - 1})">&lt; Anterior</button>`;
+        
+        let startPage = Math.max(1, cur - 2);
+        let endPage = Math.min(totalPages, cur + 2);
+        if (endPage - startPage < 4) {
+            if (startPage === 1) endPage = Math.min(totalPages, 5);
+            else if (endPage === totalPages) startPage = Math.max(1, totalPages - 4);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            if (i === cur) html += `<button class="btn btn-sm" style="background:var(--primary); color:white;">${i}</button>`;
+            else html += `<button class="btn btn-sm btn-secondary" onclick="app.changePage(${i})">${i}</button>`;
+        }
+        
+        html += `<button class="btn btn-sm ${cur === totalPages ? 'btn-secondary disabled' : 'btn-primary'}" ${cur === totalPages ? 'disabled' : ''} onclick="app.changePage(${cur + 1})">Próximo &gt;</button>`;
+        html += `<button class="btn btn-sm ${cur === totalPages ? 'btn-secondary disabled' : 'btn-primary'}" ${cur === totalPages ? 'disabled' : ''} onclick="app.changePage(${totalPages})">Último &gt;&gt;</button>`;
+        
+        container.innerHTML = html;
     },
 
     async visualizarDemanda(id) {
@@ -651,7 +741,8 @@ const app = {
         this.loadView('demandas');
     },
 
-    abrirFormNovaAcao() {
+    abrirFormNovaAcao(isEdit = false) {
+        if(!isEdit && !this.temPermissao('criar_acoes')) return alert("Sem permissão para criar ações");
         document.getElementById('detalhe-acao-form-container').style.display = 'block';
         document.getElementById('detalhe-acao-id').value = '';
         document.getElementById('detalhe-acao-descricao').value = '';
@@ -680,21 +771,21 @@ const app = {
                 <td>${a.funcionario_nome || '-'}</td>
                 <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm btn-danger-outline" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>
+                    ${this.temPermissao('editar_acoes') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>` : ''}
+                    ${this.temPermissao('excluir_acoes') ? `<button class="btn btn-sm btn-danger-outline" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>` : ''}
                 </td>
             </tr>
         `).join('');
     },
 
     async editarAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('editar_acoes')) return alert("Sem permissão");
         try {
             const doc = await db.collection('acoes').doc(idAcao).get();
             if(!doc.exists) return;
             const a = doc.data();
 
-            this.abrirFormNovaAcao();
+            this.abrirFormNovaAcao(true);
             document.getElementById('detalhe-acao-id').value = idAcao;
             document.getElementById('detalhe-acao-data').value = a.data_acao;
             document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
@@ -709,7 +800,7 @@ const app = {
     },
 
     async salvarAcaoDetalhe() {
-        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) return alert("Sem permissão");
         
         const idAcao = document.getElementById('detalhe-acao-id').value;
         const dataAcao = document.getElementById('detalhe-acao-data').value;
@@ -748,7 +839,7 @@ const app = {
     },
 
     async excluirAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('excluir_acoes')) return alert("Sem permissão");
         if(confirm("Excluir esta ação?")) {
             await db.collection('acoes').doc(idAcao).delete();
             await this.carregarAcoesDetalhe(this.demandaAbertaId);
@@ -1154,7 +1245,11 @@ const app = {
         const statusSnap = await db.collection('status_atendimento').get();
         const statusList = statusSnap.docs.map(d => d.data());
 
-        const demSnap = await db.collection('demandas').where('arquivada', '==', false).get();
+        let query = db.collection('demandas').where('arquivada', '==', false);
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+        }
+        const demSnap = await query.get();
         const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
 
         statusList.forEach(s => {
@@ -1203,7 +1298,11 @@ const app = {
     // --- CALENDÁRIO ---
     async initCalendario() {
         const container = document.getElementById('calendar-container');
-        const snap = await db.collection('demandas').where('arquivada', '==', false).get();
+        let query = db.collection('demandas').where('arquivada', '==', false);
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+        }
+        const snap = await query.get();
         const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
         
         const events = demandas.filter(d => d.data_registro).map(d => ({
@@ -1328,11 +1427,16 @@ const app = {
             let badges = '';
             if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
             else {
+                if(u.coordenadoria_nome) badges += `<span class="badge" style="background:#e0e7ff; color:#3730a3; margin-bottom: 5px;">${u.coordenadoria_nome}</span><br>`;
                 const p = u.permissoes || {};
-                if(p.criar_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Criar</span> ';
-                if(p.editar_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Editar</span> ';
-                if(p.excluir_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Excluir</span> ';
-                if(p.gerenciar_cadastros) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Cadastros</span> ';
+                const checkPerm = (val, label) => val ? `<span class="badge" style="background:#e2e8f0; color:#333; margin-top:2px;">${label}</span> ` : '';
+                
+                badges += checkPerm(p.criar_demandas, 'Criar Dem');
+                badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
+                badges += checkPerm(p.editar_demandas, 'Edit Dem');
+                badges += checkPerm(p.excluir_demandas, 'Exc Dem');
+                badges += checkPerm(p.criar_acoes, 'Criar Ação');
+                badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
             }
 
             const tr = document.createElement('tr');
@@ -1350,8 +1454,23 @@ const app = {
         });
     },
 
-    openModalUsuario(u = null) {
+    async openModalUsuario(u = null) {
+        document.body.style.cursor = 'wait';
         const isEdit = !!u;
+        let coordHtml = '<option value="">Sem Coordenação (Verá tudo)</option>';
+        try {
+            const coordSnap = await db.collection('coordenadorias').get();
+            coordSnap.docs.forEach(doc => {
+                const c = doc.data();
+                const sel = (u && u.coordenadoria_nome === c.nome) ? 'selected' : '';
+                coordHtml += `<option value="${c.nome}" ${sel}>${c.nome}</option>`;
+            });
+        } catch(e) { console.error(e); }
+        document.body.style.cursor = 'default';
+
+        const p = u ? (u.permissoes || {}) : {};
+        const chk = (val) => val ? 'checked' : '';
+
         const html = `
             <form id="userForm">
                 ${isEdit ? `<input type="hidden" name="id" value="${u.id}">` : ''}
@@ -1382,11 +1501,28 @@ const app = {
                     </select>
                 </div>
                 <div id="permissoesBox" style="display: ${!u || u.role === 'COMUM' ? 'block' : 'none'}; background: var(--background); padding: 15px; border-radius: var(--radius-md);">
+                    <div class="form-group">
+                        <label>Coordenação (Filtra dados do usuário comum)</label>
+                        <select class="form-control" name="coordenadoria_nome">
+                            ${coordHtml}
+                        </select>
+                    </div>
                     <strong>Permissões Específicas (Para perfil comum)</strong><br><br>
-                    <label><input type="checkbox" name="perm_criar" value="1" ${u && u.permissoes && u.permissoes.criar_demandas ? 'checked' : ''}> Pode Criar Demandas</label><br>
-                    <label><input type="checkbox" name="perm_editar" value="1" ${u && u.permissoes && u.permissoes.editar_demandas ? 'checked' : ''}> Pode Editar Demandas e Ações</label><br>
-                    <label><input type="checkbox" name="perm_excluir" value="1" ${u && u.permissoes && u.permissoes.excluir_demandas ? 'checked' : ''}> Pode Excluir e Arquivar Demandas</label><br>
-                    <label><input type="checkbox" name="perm_cadastros" value="1" ${u && u.permissoes && u.permissoes.gerenciar_cadastros ? 'checked' : ''}> Pode Gerenciar Cadastros Base</label>
+                    
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <label><input type="checkbox" name="p_criar_demandas" value="1" ${chk(p.criar_demandas)}> Pode Criar Demandas</label>
+                        <label><input type="checkbox" name="p_visualizar_demandas" value="1" ${chk(p.visualizar_demandas)}> Pode Visualizar Demandas</label>
+                        <label><input type="checkbox" name="p_imprimir_demandas" value="1" ${chk(p.imprimir_demandas)}> Pode Imprimir Demandas</label>
+                        <label><input type="checkbox" name="p_editar_demandas" value="1" ${chk(p.editar_demandas)}> Pode Editar Demandas</label>
+                        <label><input type="checkbox" name="p_excluir_demandas" value="1" ${chk(p.excluir_demandas)}> Pode Excluir Demandas</label>
+                        <label><input type="checkbox" name="p_arquivar_demandas" value="1" ${chk(p.arquivar_demandas)}> Pode Arquivar Demandas</label>
+                        <label><input type="checkbox" name="p_gerenciar_cadastros" value="1" ${chk(p.gerenciar_cadastros)}> Pode Gerenciar Cadastros Base</label>
+                        <label><input type="checkbox" name="p_criar_acoes" value="1" ${chk(p.criar_acoes)}> Pode Criar Ações</label>
+                        <label><input type="checkbox" name="p_visualizar_acoes" value="1" ${chk(p.visualizar_acoes)}> Pode Visualizar Ações</label>
+                        <label><input type="checkbox" name="p_imprimir_acoes" value="1" ${chk(p.imprimir_acoes)}> Pode Imprimir Ações</label>
+                        <label><input type="checkbox" name="p_editar_acoes" value="1" ${chk(p.editar_acoes)}> Pode Editar Ações</label>
+                        <label><input type="checkbox" name="p_excluir_acoes" value="1" ${chk(p.excluir_acoes)}> Pode Excluir Ações</label>
+                    </div>
                 </div>
             </form>
         `;
@@ -1407,31 +1543,39 @@ const app = {
         const fd = new FormData(form);
         const role = fd.get('role');
         const email = fd.get('email');
+        const coord = fd.get('coordenadoria_nome');
         const permissoes = {
-            criar_demandas: !!fd.get('perm_criar'),
-            editar_demandas: !!fd.get('perm_editar'),
-            excluir_demandas: !!fd.get('perm_excluir'),
-            gerenciar_cadastros: !!fd.get('perm_cadastros')
+            criar_demandas: !!fd.get('p_criar_demandas'),
+            visualizar_demandas: !!fd.get('p_visualizar_demandas'),
+            imprimir_demandas: !!fd.get('p_imprimir_demandas'),
+            editar_demandas: !!fd.get('p_editar_demandas'),
+            excluir_demandas: !!fd.get('p_excluir_demandas'),
+            arquivar_demandas: !!fd.get('p_arquivar_demandas'),
+            gerenciar_cadastros: !!fd.get('p_gerenciar_cadastros'),
+            criar_acoes: !!fd.get('p_criar_acoes'),
+            visualizar_acoes: !!fd.get('p_visualizar_acoes'),
+            imprimir_acoes: !!fd.get('p_imprimir_acoes'),
+            editar_acoes: !!fd.get('p_editar_acoes'),
+            excluir_acoes: !!fd.get('p_excluir_acoes')
         };
 
         if(isEdit) {
             const id = fd.get('id');
-            await db.collection('usuarios').doc(id).update({ role, permissoes });
+            await db.collection('usuarios').doc(id).update({ role, permissoes, coordenadoria_nome: coord });
             this.closeModal();
             this.initUsuarios();
         } else {
             const metodo = fd.get('metodo_login');
             try {
                 if (metodo === 'google') {
-                    // Apenas cadastra na whitelist para o usuário entrar depois
                     await db.collection('usuarios').add({
                         login: email.split('@')[0],
                         email: email,
                         role: role,
-                        permissoes: permissoes
+                        permissoes: permissoes,
+                        coordenadoria_nome: coord
                     });
                 } else {
-                    // Cria conta real com senha no Firebase Auth
                     const senha = fd.get('senha');
                     if(!senha) return alert("Por favor, digite a senha inicial.");
                     
@@ -1442,7 +1586,8 @@ const app = {
                         login: email.split('@')[0],
                         email: email,
                         role: role,
-                        permissoes: permissoes
+                        permissoes: permissoes,
+                        coordenadoria_nome: coord
                     });
                     
                     secondaryApp.auth().signOut();
