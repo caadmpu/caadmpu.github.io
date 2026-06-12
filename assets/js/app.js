@@ -317,11 +317,6 @@ const app = {
     },
 
     async carregarDemandas() {
-        const showArchived = document.getElementById('filter-arquivadas').checked;
-        try {
-            const snap = await db.collection('demandas').get();
-            let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            
         try {
             document.body.style.cursor = 'wait';
             let query = db.collection('demandas');
