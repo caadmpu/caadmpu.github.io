@@ -323,6 +323,16 @@ const app = {
         return `${p[2]}/${p[1]}/${p[0]}`;
     },
 
+    getBadgeColor(tipo) {
+        if(!tipo || typeof tipo !== 'string') return '#64748b';
+        const t = tipo.toLowerCase();
+        if(t.includes('manutenção')) return '#eab308';
+        if(t.includes('pedagógic')) return '#8b5cf6';
+        if(t.includes('tecnologia') || t.includes('ti')) return '#06b6d4';
+        if(t.includes('infraestrutura')) return '#f97316';
+        return '#64748b';
+    },
+
     renderTabelaDemandas(demandas) {
         const tbody = document.getElementById('demandas-tbody');
         tbody.innerHTML = '';
