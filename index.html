@@ -20,13 +20,17 @@
     <!-- Ícones -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
-    <!-- Firebase SDK v8 -->
+    <!-- Estilo Principal -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
-    <!-- Estilo Principal -->
-    <link rel="stylesheet" href="assets/css/style.css">
+    <!-- Libs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
@@ -65,18 +69,29 @@
     <!-- App Container -->
     <div id="app-container" style="display: none; width: 100%; height: 100%;">
         <!-- Sidebar Lateral -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <img src="assets/img/logo.png" alt="Logo" class="logo-img" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
+                <div class="logo">
+                    <i class="ri-book-mark-line"></i>
+                    <div>
+                        <h2>Gestão de Demandas</h2>
+                        <span>CRE Manacapuru</span>
+                    </div>
+                </div>
             </div>
             <nav class="sidebar-nav">
-                <ul>
-                    <li class="active" data-view="dashboard"><i class="ri-dashboard-line"></i> Dashboard</li>
-                    <li data-view="demandas"><i class="ri-list-check"></i> Demandas</li>
-                    <li data-view="kanban"><i class="ri-layout-column-line"></i> Kanban</li>
-                    <li data-view="calendario"><i class="ri-calendar-line"></i> Calendário</li>
-                    <li data-view="cadastros"><i class="ri-settings-3-line"></i> Cadastros</li>
-                    <li id="menu-usuarios" data-view="usuarios" style="display:none;"><i class="ri-user-settings-line"></i> Usuários</li>
+                <div class="nav-section">PRINCIPAL</div>
+                <ul id="main-menu">
+                    <li class="active" onclick="app.showView('dashboard')"><i class="ri-dashboard-line"></i> Dashboard</li>
+                    <li onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</li>
+                    <li onclick="app.showView('demandas')"><i class="ri-file-list-3-line"></i> Demandas</li>
+                    <li onclick="app.showView('arquivadas')"><i class="ri-inbox-archive-line"></i> Arquivadas</li>
+                </ul>
+                
+                <div class="nav-section">CADASTROS</div>
+                <ul id="config-menu">
+                    <li onclick="app.showView('cadastros')"><i class="ri-settings-4-line"></i> Tabelas Base</li>
+                    <li id="menu-usuarios" style="display:none;" onclick="app.showView('usuarios')"><i class="ri-user-settings-line"></i> Usuários</li>
                 </ul>
             </nav>
             <div class="sidebar-footer">
@@ -110,22 +125,41 @@
     
     <!-- View: Dashboard -->
     <template id="view-dashboard">
+        <div class="dashboard-header-title">
+            <div class="logo-box"><i class="ri-book-read-fill"></i></div>
+            <div class="title-text">
+                <h2>Gestão de Demandas</h2>
+                <p>Coordenadoria Regional de Educação — Manacapuru</p>
+            </div>
+        </div>
         <div class="dashboard-kpis">
             <div class="kpi-card">
-                <h3>TOTAL DEMANDAS</h3>
-                <div class="kpi-value" id="kpi-total">0</div>
+                <div class="kpi-icon box-primary"><i class="ri-file-copy-2-line"></i></div>
+                <div class="kpi-data">
+                    <h3>DEMANDAS</h3>
+                    <div class="kpi-value" id="kpi-total">0</div>
+                </div>
             </div>
-            <div class="kpi-card success">
-                <h3>FINALIZADAS</h3>
-                <div class="kpi-value" id="kpi-finalizadas">0</div>
+            <div class="kpi-card">
+                <div class="kpi-icon box-success"><i class="ri-checkbox-circle-line"></i></div>
+                <div class="kpi-data">
+                    <h3>FINALIZADAS</h3>
+                    <div class="kpi-value" id="kpi-finalizadas">0</div>
+                </div>
             </div>
-            <div class="kpi-card warning">
-                <h3>EM ANDAMENTO</h3>
-                <div class="kpi-value" id="kpi-andamento">0</div>
+            <div class="kpi-card">
+                <div class="kpi-icon box-warning"><i class="ri-time-line"></i></div>
+                <div class="kpi-data">
+                    <h3>EM ANDAMENTO</h3>
+                    <div class="kpi-value" id="kpi-andamento">0</div>
+                </div>
             </div>
-            <div class="kpi-card secondary">
-                <h3>ARQUIVADAS</h3>
-                <div class="kpi-value" id="kpi-arquivadas">0</div>
+            <div class="kpi-card">
+                <div class="kpi-icon box-secondary"><i class="ri-inbox-archive-line"></i></div>
+                <div class="kpi-data">
+                    <h3>ARQUIVADAS</h3>
+                    <div class="kpi-value" id="kpi-arquivadas">0</div>
+                </div>
             </div>
         </div>
         
@@ -162,8 +196,10 @@
         <div class="toolbar">
             <button class="btn btn-primary" onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</button>
             <button class="btn btn-secondary" onclick="app.openModalImportar()"><i class="ri-file-excel-line"></i> Importar Colar (Excel)</button>
-            <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
-            <button class="btn btn-danger" onclick="app.resetarContadorDemandas()" title="Zerar a numeração para iniciar do 0001" style="margin-left:auto;"><i class="ri-refresh-line"></i> Resetar N°</button>
+            <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Relatório Excel</button>
+            <button class="btn btn-secondary" onclick="app.exportarRelatorioPDF()"><i class="ri-file-pdf-line"></i> Relatório PDF</button>
+            <button class="btn btn-danger" onclick="app.renumerarTudo()" title="Renumerar as demandas existentes do 0001 em diante" style="margin-left:auto;"><i class="ri-list-ordered-2"></i> Renumerar Tudo</button>
+            <button class="btn btn-danger" onclick="app.resetarContadorDemandas()" title="Zerar a numeração para iniciar do 0001"><i class="ri-refresh-line"></i> Resetar Novo</button>
             <div class="filters">
                 <input type="text" id="filter-search" placeholder="Buscar...">
                 <select id="filter-coordenadoria"><option value="">Todas Coordenações</option></select>

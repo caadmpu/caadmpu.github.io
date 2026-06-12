@@ -318,12 +318,13 @@ const app = {
                 <td><span class="badge badge-${cssStatus}">${d.status_nome || '-'}</span></td>
                 <td>${d.funcionario_nome || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')"><i class="ri-edit-line"></i></button>
+                    <button class="btn btn-sm btn-info" onclick="app.visualizarDemanda('${d.id}')" title="Visualizar/Imprimir"><i class="ri-eye-line"></i></button>
+                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
                     ${d.arquivada 
-                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')"><i class="ri-inbox-unarchive-line"></i></button>`
-                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')"><i class="ri-inbox-archive-line"></i></button>`
+                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
+                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
                     }
-                    <button class="btn btn-sm btn-primary" onclick="app.verAcoes('${d.id}')"><i class="ri-history-line"></i></button>
+                    <button class="btn btn-sm btn-primary" onclick="app.verAcoes('${d.id}')" title="Histórico"><i class="ri-history-line"></i></button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -348,6 +349,79 @@ const app = {
         this.renderTabelaDemandas(filtradas);
     },
 
+    async visualizarDemanda(id) {
+        const doc = await db.collection('demandas').doc(id).get();
+        if(!doc.exists) return;
+        const d = doc.data();
+
+        // Busca o histórico de ações para incluir na ficha
+        const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
+        let acoes = acoesSnap.docs.map(a => a.data());
+        acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
+
+        let html = `
+            <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
+                <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                    <h2 style="margin:0; color: #1e293b;">Ficha da Demanda</h2>
+                    <h3 style="margin:5px 0 0 0; color: #0ea5e9;">Nº ${d.numero_registro || '-'}</h3>
+                </div>
+                
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
+                </table>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Descrição</h4>
+                    <p style="background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: pre-wrap;">${d.descricao || 'Sem descrição.'}</p>
+                </div>
+                
+                <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f1f5f9;">
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Ação</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Responsável</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Status Mudou</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${acoes.length === 0 ? '<tr><td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr>' : 
+                        acoes.map(a => `
+                            <tr>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.status_nome || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        this.openModal('Ficha da Demanda', html, [
+            { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() },
+            { label: 'Exportar PDF', class: 'btn-primary', action: () => {
+                const element = document.getElementById('ficha-demanda-pdf');
+                html2pdf().from(element).set({
+                    margin: 10,
+                    filename: `Demanda_${d.numero_registro.replace('/','_')}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                }).save();
+            } }
+        ]);
+    },
+
     exportExcel() {
         let csvContent = "data:text/csv;charset=utf-8,";
         const rows = window.todasDemandas;
@@ -368,6 +442,64 @@ const app = {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    },
+
+    exportarRelatorioPDF() {
+        const trs = document.querySelectorAll('#demandas-tbody tr');
+        if (trs.length === 0) return alert("Nenhuma demanda na tabela para exportar.");
+
+        let htmlContent = `
+            <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif;">
+                <h2 style="text-align: center; color: #1e293b; border-bottom: 2px solid #0ea5e9; padding-bottom: 10px;">Relatório de Demandas</h2>
+                <p style="text-align: center; color: #64748b; font-size: 12px; margin-bottom: 20px;">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; color: #333;">
+                            <th style="padding: 6px; border: 1px solid #ddd;">Nº</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Data</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Demandante</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Coordenação</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Escola</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Tipo</th>
+                            <th style="padding: 6px; border: 1px solid #ddd;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        trs.forEach(tr => {
+            const tds = tr.querySelectorAll('td');
+            htmlContent += `
+                <tr>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[0].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[1].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[2].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[3].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[4].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[5].innerText}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[6].innerText}</td>
+                </tr>
+            `;
+        });
+
+        htmlContent += `</tbody></table></div>`;
+
+        // Cria um container invisível temporário
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.left = '-9999px';
+        document.body.appendChild(tempDiv);
+
+        html2pdf().from(tempDiv.firstElementChild).set({
+            margin: 10,
+            filename: `Relatorio_Demandas_${Date.now()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        }).save().then(() => {
+            document.body.removeChild(tempDiv);
+        });
     },
 
     async arquivarDemanda(id) {
@@ -596,6 +728,50 @@ const app = {
             const anoAtual = new Date().getFullYear();
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: 0 });
             alert("Contador resetado com sucesso! A próxima demanda será a 0001.");
+        }
+    },
+
+    async renumerarTudo() {
+        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
+        if(!confirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\\n\\nDeseja prosseguir?")) return;
+        
+        try {
+            document.body.style.cursor = 'wait';
+            const anoAtual = new Date().getFullYear();
+            
+            // Busca todas as demandas
+            const snap = await db.collection('demandas').get();
+            let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            // Ordena da mais antiga para a mais nova, para numerar em ordem cronológica
+            demandas.sort((a, b) => new Date(a.data_registro || 0) - new Date(b.data_registro || 0));
+            
+            const batch = db.batch();
+            let seq = 1;
+            
+            for(let d of demandas) {
+                const seqFormatada = String(seq).padStart(4, '0');
+                const novoNumero = `${seqFormatada}/${anoAtual}`;
+                
+                const docRef = db.collection('demandas').doc(d.id);
+                batch.update(docRef, { numero_registro: novoNumero });
+                seq++;
+            }
+            
+            // Grava tudo no banco
+            await batch.commit();
+            
+            // Atualiza o contador para a próxima ser a certa
+            await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: seq - 1 });
+            
+            document.body.style.cursor = 'default';
+            alert(`Sucesso! ${demandas.length} demandas foram renumeradas.`);
+            this.carregarDemandas();
+            
+        } catch(e) {
+            document.body.style.cursor = 'default';
+            console.error(e);
+            alert("Erro ao renumerar: " + e.message);
         }
     },
 
