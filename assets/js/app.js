@@ -43,8 +43,15 @@ const app = {
                 if(doc.exists) {
                     this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
                 } else {
-                    // Fallback se não existir documento ainda
-                    this.userDoc = { uid: user.uid, email: user.email, role: 'COMUM', permissoes: {} };
+                    // Primeiro login via Google!
+                    const newUserDoc = { 
+                        login: user.displayName || user.email.split('@')[0],
+                        email: user.email, 
+                        role: 'COMUM', 
+                        permissoes: {} 
+                    };
+                    await db.collection('usuarios').doc(user.uid).set(newUserDoc);
+                    this.userDoc = { uid: user.uid, ...newUserDoc };
                 }
                 this.showApp();
             } else {
@@ -84,6 +91,17 @@ const app = {
         try {
             await auth.signInWithEmailAndPassword(email, pass);
             // onAuthStateChanged cuidará do redirecionamento
+        } catch (error) {
+            errDiv.innerText = "Erro: " + error.message;
+        }
+    },
+
+    async doLoginGoogle() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const errDiv = document.getElementById('login_error');
+        errDiv.innerText = '';
+        try {
+            await auth.signInWithPopup(provider);
         } catch (error) {
             errDiv.innerText = "Erro: " + error.message;
         }
