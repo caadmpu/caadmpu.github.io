@@ -306,10 +306,6 @@ const app = {
             
             window.todasDemandas = demandas;
             
-            // DEBUG VISUAL: Mostra no botão quantas demandas o Firebase devolveu antes do filtro
-            const btnNew = document.querySelector('.toolbar .btn-primary');
-            if(btnNew) btnNew.innerHTML = `<i class="ri-add-line"></i> Nova Demanda (Total BD: ${snap.docs.length} | Filtradas: ${demandas.length})`;
-
             this.renderTabelaDemandas(window.todasDemandas);
         } catch(e) {
             console.error("Erro ao carregar demandas:", e);
@@ -356,13 +352,14 @@ const app = {
                 <td><span class="badge badge-${cssStatus}">${d.status_nome || '-'}</span></td>
                 <td>${d.funcionario_nome || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-info" onclick="app.visualizarDemanda('${d.id}')" title="Visualizar/Imprimir"><i class="ri-eye-line"></i></button>
+                    <button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>
                     <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
+                    <button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                    <button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>
                     ${d.arquivada 
                         ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
                         : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
                     }
-                    <button class="btn btn-sm btn-primary" onclick="app.verAcoes('${d.id}')" title="Histórico"><i class="ri-history-line"></i></button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -405,9 +402,14 @@ const app = {
 
         let html = `
             <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
-                <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
-                    <h2 style="margin:0; color: #1e293b;">Ficha da Demanda</h2>
-                    <h3 style="margin:5px 0 0 0; color: #0ea5e9;">Nº ${d.numero_registro || '-'}</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                    <img src="assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
+                    <div style="text-align: center;">
+                        <h2 style="margin:0; font-size: 18px; color: #1e293b;">Sistema de Gestão de Demandas</h2>
+                        <h3 style="margin:2px 0; font-size: 14px; color: #475569; font-weight: normal;">Coordenadoria Regional de Educação de Manacapuru</h3>
+                        <h4 style="margin:10px 0 0 0; font-size: 16px; color: #0ea5e9;">Ficha da Demanda - Nº ${d.numero_registro || '-'}</h4>
+                    </div>
+                    <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
                 </div>
                 
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
@@ -494,8 +496,16 @@ const app = {
 
         let htmlContent = `
             <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif;">
-                <h2 style="text-align: center; color: #1e293b; border-bottom: 2px solid #0ea5e9; padding-bottom: 10px;">Relatório de Demandas</h2>
-                <p style="text-align: center; color: #64748b; font-size: 12px; margin-bottom: 20px;">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                    <img src="assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
+                    <div style="text-align: center;">
+                        <h2 style="margin:0; font-size: 18px; color: #1e293b;">Sistema de Gestão de Demandas</h2>
+                        <h3 style="margin:2px 0; font-size: 14px; color: #475569; font-weight: normal;">Coordenadoria Regional de Educação de Manacapuru</h3>
+                        <h4 style="margin:10px 0 0 0; font-size: 16px; color: #0ea5e9;">Relatório de Demandas</h4>
+                        <p style="margin:5px 0 0 0; color: #64748b; font-size: 12px;">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
+                </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                     <thead>
                         <tr style="background-color: #f1f5f9; color: #333;">
@@ -564,86 +574,160 @@ const app = {
 
     // Ações da Demanda
     async verAcoes(id) {
-        const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
-        let acoes = snap.docs.map(d => d.data());
-        
-        // Ordenação client-side para evitar index errors
-        acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
-        
-        let html = `
-            <div style="margin-bottom: 15px;">
-                <button class="btn btn-sm btn-primary" onclick="app.novaAcao('${id}')"><i class="ri-add-line"></i> Nova Ação</button>
-            </div>
-            <table class="data-table">
-                <thead><tr><th>Data</th><th>Descrição</th><th>Funcionário</th><th>Status Momento</th></tr></thead>
-                <tbody>
-                    ${acoes.map(a => `
-                        <tr>
-                            <td>${this.formatarDataBR(a.data_acao)}</td>
-                            <td>${a.descricao}</td>
-                            <td>${a.funcionario_nome}</td>
-                            <td>${a.status_nome ? `<span class="badge" style="background:var(--primary)">${a.status_nome}</span>` : '-'}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>`;
-        this.openModal('Histórico de Ações', html, []);
+        // Obsoleto: Substituído por abrirDetalhesDemanda
+        this.abrirDetalhesDemanda(id);
     },
 
-    async novaAcao(demanda_id) {
-        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+    // --- NOVA TELA DE DETALHES ---
+    async excluirDemandaEVoltar(id) {
+        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão.");
+        if(confirm("Tem certeza que deseja excluir esta demanda definitivamente?")) {
+            try {
+                await db.collection('demandas').doc(id).delete();
+                const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
+                const batch = db.batch();
+                acoes.forEach(a => batch.delete(a.ref));
+                await batch.commit();
+                alert("Excluída com sucesso.");
+                this.voltarDemandas();
+            } catch(e) { console.error(e); }
+        }
+    },
 
-        const funcSnap = await db.collection('funcionarios').get();
-        const funcionarios = funcSnap.docs.map(d => ({id: d.id, ...d.data()}));
-        const statSnap = await db.collection('status_atendimento').get();
-        const status = statSnap.docs.map(d => ({id: d.id, ...d.data()}));
-        
-        const html = `
-            <form id="acaoForm">
-                <input type="hidden" name="demanda_id" value="${demanda_id}">
-                <div class="form-group">
-                    <label>Descrição da Ação</label>
-                    <textarea class="form-control" name="descricao" rows="2" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Responsável (Funcionário)</label>
-                    <select class="form-control" name="funcionario_nome">
-                        <option value="">Selecione...</option>
-                        ${funcionarios.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Mudar Status da Demanda para (Opcional)</label>
-                    <select class="form-control" name="status_nome">
-                        <option value="">Manter Status Atual</option>
-                        ${status.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
-                    </select>
-                </div>
-            </form>
-        `;
-        
-        this.openModal('Registrar Ação', html, [
-            { label: 'Salvar', class: 'btn-primary', action: async () => {
-                const form = document.getElementById('acaoForm');
-                if(!form.checkValidity()) return form.reportValidity();
-                const fd = new FormData(form);
-                
-                await db.collection('acoes').add({
-                    demanda_id: demanda_id,
-                    descricao: fd.get('descricao'),
-                    funcionario_nome: fd.get('funcionario_nome'),
-                    status_nome: fd.get('status_nome'),
-                    data_acao: new Date().toISOString().split('T')[0]
-                });
+    async abrirDetalhesDemanda(id) {
+        document.body.style.cursor = 'wait';
+        try {
+            const doc = await db.collection('demandas').doc(id).get();
+            if(!doc.exists) return;
+            const d = doc.data();
+            this.demandaAbertaId = id;
 
-                if (fd.get('status_nome')) {
-                    await db.collection('demandas').doc(demanda_id).update({ status_nome: fd.get('status_nome') });
+            // Carrega o template primeiro
+            document.getElementById('contentArea').innerHTML = document.getElementById('view-demanda-detalhe').innerHTML;
+
+            // Preenche dados
+            const actionsDiv = document.getElementById('detalhe-actions');
+            actionsDiv.innerHTML = `
+                <button class="btn btn-secondary" onclick="app.editarDemanda('${id}')"><i class="ri-edit-line"></i> Editar</button>
+                ${d.arquivada 
+                    ? `<button class="btn btn-secondary" onclick="app.desarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
+                    : `<button class="btn btn-secondary" onclick="app.arquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
                 }
-                
-                this.closeModal();
-                this.verAcoes(demanda_id);
-            } }
-        ]);
+                <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
+                <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
+            `;
+
+            document.getElementById('detalhe-numero').innerText = `Nº ${d.numero_registro || '-'}`;
+            document.getElementById('detalhe-status').innerText = d.status_nome || 'SEM STATUS';
+            document.getElementById('detalhe-status').className = 'badge badge-' + this.getBadgeColor(d.status_nome);
+            
+            document.getElementById('detalhe-descricao').innerText = d.descricao || 'Sem descrição';
+            document.getElementById('detalhe-data').innerText = this.formatarDataBR(d.data_registro);
+            document.getElementById('detalhe-processo').innerText = d.processo_siged || '-';
+            document.getElementById('detalhe-tipo').innerText = d.tipo_nome || '-';
+            document.getElementById('detalhe-demandante').innerText = d.demandante_nome || '-';
+            document.getElementById('detalhe-escola').innerText = d.escola_nome || '-';
+            document.getElementById('detalhe-responsavel').innerText = d.funcionario_nome || '-';
+
+            // Selects do form de ação
+            const funcSnap = await db.collection('funcionarios').get();
+            const statSnap = await db.collection('status_atendimento').get();
+            const selResp = document.getElementById('detalhe-acao-responsavel');
+            const selStat = document.getElementById('detalhe-acao-status');
+            
+            selResp.innerHTML = '<option value="">Selecione</option>' + funcSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+            selStat.innerHTML = '<option value="">Selecione o status</option>' + statSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+            document.getElementById('detalhe-acao-data').value = new Date().toISOString().split('T')[0];
+
+            await this.carregarAcoesDetalhe(id);
+        } catch(e) { console.error(e); }
+        document.body.style.cursor = 'default';
+    },
+
+    voltarDemandas() {
+        this.loadView('demandas');
+    },
+
+    abrirFormNovaAcao() {
+        document.getElementById('detalhe-acao-form-container').style.display = 'block';
+        document.getElementById('detalhe-acao-id').value = '';
+        document.getElementById('detalhe-acao-descricao').value = '';
+    },
+    fecharFormNovaAcao() {
+        document.getElementById('detalhe-acao-form-container').style.display = 'none';
+    },
+
+    async carregarAcoesDetalhe(id) {
+        const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
+        let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        acoes.sort((a, b) => new Date(b.data_acao || 0) - new Date(a.data_acao || 0)); // Mais recentes primeiro
+
+        const tbody = document.getElementById('detalhe-acoes-tbody');
+        if(!tbody) return;
+
+        if(acoes.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma ação registrada.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = acoes.map(a => `
+            <tr>
+                <td>${this.formatarDataBR(a.data_acao)}</td>
+                <td>${a.descricao}</td>
+                <td>${a.funcionario_nome || '-'}</td>
+                <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async salvarAcaoDetalhe() {
+        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        
+        const idAcao = document.getElementById('detalhe-acao-id').value;
+        const dataAcao = document.getElementById('detalhe-acao-data').value;
+        const resp = document.getElementById('detalhe-acao-responsavel').value;
+        const desc = document.getElementById('detalhe-acao-descricao').value;
+        const status = document.getElementById('detalhe-acao-status').value;
+        
+        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Salvando...';
+
+        try {
+            const acaoData = {
+                demanda_id: this.demandaAbertaId,
+                data_acao: dataAcao,
+                funcionario_nome: resp,
+                descricao: desc,
+                status_nome: status
+            };
+
+            if(idAcao) {
+                await db.collection('acoes').doc(idAcao).update(acaoData);
+            } else {
+                await db.collection('acoes').add(acaoData);
+            }
+
+            if(status) {
+                await db.collection('demandas').doc(this.demandaAbertaId).update({ status_nome: status });
+            }
+
+            this.fecharFormNovaAcao();
+            await this.abrirDetalhesDemanda(this.demandaAbertaId); // Recarrega tudo
+        } catch(e) {
+            console.error(e);
+            alert("Erro ao salvar ação");
+        }
+        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Registrar Ação';
+    },
+
+    async excluirAcaoDetalhe(idAcao) {
+        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
+        if(confirm("Excluir esta ação?")) {
+            await db.collection('acoes').doc(idAcao).delete();
+            await this.carregarAcoesDetalhe(this.demandaAbertaId);
+        }
     },
 
     // Nova Demanda
@@ -816,6 +900,107 @@ const app = {
             document.body.style.cursor = 'default';
             console.error(e);
             alert("Erro ao renumerar: " + e.message);
+        }
+    },
+
+    async gerarPdfDemandaNovaGuia(id) {
+        document.body.style.cursor = 'wait';
+        try {
+            const doc = await db.collection('demandas').doc(id).get();
+            if(!doc.exists) return;
+            const d = doc.data();
+
+            const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
+            let acoes = acoesSnap.docs.map(a => a.data());
+            acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
+
+            let html = `
+                <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                        <img src="${window.location.origin}/assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
+                        <div style="text-align: center;">
+                            <h2 style="margin:0; font-size: 18px; color: #1e293b;">Sistema de Gestão de Demandas</h2>
+                            <h3 style="margin:2px 0; font-size: 14px; color: #475569; font-weight: normal;">Coordenadoria Regional de Educação de Manacapuru</h3>
+                            <h4 style="margin:10px 0 0 0; font-size: 16px; color: #0ea5e9;">Ficha da Demanda - Nº ${d.numero_registro || '-'}</h4>
+                        </div>
+                        <img src="${window.location.origin}/assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
+                    </div>
+                    
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                        <tr><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
+                    </table>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Descrição</h4>
+                        <p style="background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: pre-wrap;">${d.descricao || 'Sem descrição.'}</p>
+                    </div>
+                    
+                    <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <tr style="background:#f1f5f9;">
+                            <th style="padding: 8px; border: 1px solid #ddd;">Data</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Ação/Descrição</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Usuário</th>
+                        </tr>
+                        ${acoes.length ? acoes.map(a => `
+                            <tr>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;"><strong>${a.tipo_acao}</strong><br>${a.descricao}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.usuario_nome}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="3" style="padding: 8px; text-align: center; border: 1px solid #ddd;">Nenhuma ação registrada.</td></tr>'}
+                    </table>
+                </div>
+            `;
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv);
+
+            const opt = {
+                margin: 10,
+                filename: `Demanda_${d.numero_registro ? d.numero_registro.replace('/','-') : id}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const pdfBlobUrl = await html2pdf().from(tempDiv.firstElementChild).set(opt).output('bloburl');
+            window.open(pdfBlobUrl, '_blank');
+            document.body.removeChild(tempDiv);
+        } catch (e) {
+            console.error("Erro ao gerar PDF:", e);
+            alert("Erro ao gerar PDF.");
+        }
+        document.body.style.cursor = 'default';
+    },
+
+    async excluirDemanda(id) {
+        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão para excluir demandas.");
+        if(confirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.")) {
+            try {
+                await db.collection('demandas').doc(id).delete();
+                // Opcional: deletar o histórico de ações também
+                const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
+                const batch = db.batch();
+                acoes.forEach(a => batch.delete(a.ref));
+                await batch.commit();
+                
+                alert("Demanda excluída com sucesso!");
+                this.carregarDemandas();
+            } catch(e) {
+                console.error("Erro ao excluir demanda:", e);
+                alert("Erro ao excluir demanda.");
+            }
         }
     },
 

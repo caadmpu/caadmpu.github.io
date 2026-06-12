@@ -615,3 +615,129 @@ body {
     font-size: 0.9rem;
     font-weight: 500;
 }
+
+/* Detalhes da Demanda */
+.demanda-detalhe-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    height: 100%;
+}
+.demanda-detalhe-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.btn-voltar {
+    background: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--border);
+    font-weight: 500;
+}
+.btn-voltar:hover {
+    background: #f1f5f9;
+}
+.demanda-detalhe-actions {
+    display: flex;
+    gap: 10px;
+}
+.demanda-detalhe-actions .btn {
+    border-radius: var(--radius-md);
+    background: white;
+    color: var(--text-color);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.demanda-detalhe-actions .btn:hover {
+    background: #f8fafc;
+}
+.demanda-detalhe-actions .btn-danger-outline {
+    background: var(--danger-color);
+    color: white;
+    border-color: var(--danger-color);
+}
+.demanda-detalhe-actions .btn-danger-outline:hover {
+    background: #b91c1c;
+}
+
+.detalhe-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 25px;
+    border: 1px solid var(--border);
+}
+
+.detalhe-badge-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.detalhe-titulo {
+    font-size: 20px;
+    color: #0f172a;
+    margin: 0 0 20px 0;
+    font-weight: 600;
+}
+
+.detalhe-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+.detalhe-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.detalhe-item label {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+}
+.detalhe-item span {
+    font-size: 15px;
+    color: #1e293b;
+    font-weight: 500;
+}
+
+.detalhe-acoes-card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.acoes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 15px;
+}
+.acoes-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.acoes-form-container {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+.acoes-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+

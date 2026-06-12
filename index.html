@@ -235,6 +235,113 @@
         </div>
     </template>
 
+    <!-- View: Detalhes da Demanda (Página Cheia) -->
+    <template id="view-demanda-detalhe">
+        <div class="demanda-detalhe-container">
+            <div class="demanda-detalhe-header">
+                <button class="btn btn-voltar" onclick="app.voltarDemandas()"><i class="ri-arrow-left-line"></i> Voltar</button>
+                <div class="demanda-detalhe-actions" id="detalhe-actions">
+                    <!-- Botões injetados via JS -->
+                </div>
+            </div>
+
+            <!-- Card Superior: Dados Estáticos -->
+            <div class="card detalhe-card">
+                <div class="detalhe-badge-row">
+                    <span class="badge" style="background:#e2e8f0; color:#333; font-weight:600;" id="detalhe-numero">-</span>
+                    <span class="badge" id="detalhe-status">-</span>
+                </div>
+                <h2 class="detalhe-titulo" id="detalhe-descricao">-</h2>
+                
+                <div class="detalhe-grid">
+                    <div class="detalhe-item">
+                        <label>Data do Registro</label>
+                        <span id="detalhe-data">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Processo SIGED</label>
+                        <span id="detalhe-processo">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Tipo de Demanda</label>
+                        <span id="detalhe-tipo">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Demandante</label>
+                        <span id="detalhe-demandante">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Escola Demandante</label>
+                        <span id="detalhe-escola">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Servidor Responsável</label>
+                        <span id="detalhe-responsavel">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Inferior: Registro de Ações -->
+            <div class="card detalhe-card detalhe-acoes-card">
+                <div class="acoes-header">
+                    <h3><i class="ri-file-list-3-line"></i> Registro de Ações</h3>
+                    <button class="btn btn-primary" onclick="app.abrirFormNovaAcao()"><i class="ri-add-line"></i> Nova Ação</button>
+                </div>
+
+                <!-- Formulário de Nova Ação (Oculto por padrão) -->
+                <div class="acoes-form-container" id="detalhe-acao-form-container" style="display: none;">
+                    <form id="detalhe-acao-form" onsubmit="event.preventDefault(); app.salvarAcaoDetalhe();">
+                        <input type="hidden" id="detalhe-acao-id">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Data *</label>
+                                <input type="date" id="detalhe-acao-data" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Servidor Responsável</label>
+                                <select id="detalhe-acao-responsavel" class="form-control">
+                                    <option value="">Selecione</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Descrição da Ação *</label>
+                            <textarea id="detalhe-acao-descricao" class="form-control" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Status da Demanda *</label>
+                            <select id="detalhe-acao-status" class="form-control" required>
+                                <option value="">Selecione o status</option>
+                            </select>
+                        </div>
+                        <div class="acoes-form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="app.fecharFormNovaAcao()">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" id="btn-salvar-acao-detalhe">Registrar Ação</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tabela de Ações -->
+                <div class="table-container acoes-table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Descrição da Ação</th>
+                                <th>Servidor Responsável</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detalhe-acoes-tbody">
+                            <!-- Linhas injetadas via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <!-- View: Kanban -->
     <template id="view-kanban">
         <div class="kanban-board" id="kanbanBoard">
@@ -313,6 +420,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="assets/js/app.js?v=4"></script>
+    <script src="assets/js/app.js?v=7"></script>
 </body>
 </html>
