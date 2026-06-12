@@ -256,6 +256,7 @@ const app = {
         this.carregarDemandas();
         
         document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-processo').addEventListener('input', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
@@ -374,6 +375,7 @@ const app = {
 
     filtrarTabelaDemandas() {
         const term = document.getElementById('filter-search').value.toLowerCase();
+        const procTerm = document.getElementById('filter-processo').value.toLowerCase();
         const escola = document.getElementById('filter-escola').value;
         const tipo = document.getElementById('filter-tipo').value;
         const status = document.getElementById('filter-status').value;
@@ -381,11 +383,12 @@ const app = {
         
         const filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
+            const matchProc = d.processo_siged ? d.processo_siged.toLowerCase().includes(procTerm) : (procTerm === '');
             const matchEscola = escola ? d.escola_nome === escola : true;
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;
             const matchCoord = coord ? d.coordenadoria_nome === coord : true;
-            return matchTerm && matchEscola && matchTipo && matchStatus && matchCoord;
+            return matchTerm && matchProc && matchEscola && matchTipo && matchStatus && matchCoord;
         });
         this.renderTabelaDemandas(filtradas);
     },
@@ -974,8 +977,8 @@ const app = {
                         ${acoes.length ? acoes.map(a => `
                             <tr>
                                 <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;"><strong>${a.tipo_acao}</strong><br>${a.descricao}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.usuario_nome}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao || '-'}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome || '-'}</td>
                             </tr>
                         `).join('') : '<tr><td colspan="3" style="padding: 8px; text-align: center; border: 1px solid #ddd;">Nenhuma ação registrada.</td></tr>'}
                     </table>
