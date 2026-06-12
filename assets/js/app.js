@@ -146,7 +146,7 @@ const app = {
     temPermissao(acao) {
         if (!this.userDoc) return false;
         if (this.userDoc.role === 'ADM') return true;
-        return !!this.userDoc.permissoes[acao];
+        return !!(this.userDoc.permissoes && this.userDoc.permissoes[acao]);
     },
 
     startClock() {
