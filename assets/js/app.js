@@ -12,6 +12,13 @@ const firebaseConfig = {
     measurementId: "G-TX5P8C0258"
 };
 
+// ==========================================
+// RESTRIÇÃO DE DOMÍNIO (Opcional)
+// ==========================================
+// Se quiser permitir apenas e-mails de uma empresa, coloque aqui (ex: "@mpu.mp.br").
+// Deixe em branco ("") para permitir qualquer e-mail do Google.
+const DOMINIO_AUTORIZADO = "@educacao.am.gov.br"; 
+
 // Inicializa Firebase
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
@@ -38,6 +45,14 @@ const app = {
         // Monitora o status de login via Firebase Auth
         auth.onAuthStateChanged(async (user) => {
             if (user) {
+                // Checagem de Domínio Restrito (Ignora a regra para o admin master)
+                if (DOMINIO_AUTORIZADO && !user.email.endsWith(DOMINIO_AUTORIZADO) && user.email !== 'admin@admin.com') {
+                    await auth.signOut();
+                    document.getElementById('login_error').innerText = "Acesso Negado: Apenas contas " + DOMINIO_AUTORIZADO + " são permitidas.";
+                    this.showLogin();
+                    return;
+                }
+
                 // Busca as permissões extras no Firestore
                 const doc = await db.collection('usuarios').doc(user.uid).get();
                 if(doc.exists) {
