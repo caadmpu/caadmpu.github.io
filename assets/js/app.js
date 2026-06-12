@@ -1,5 +1,11 @@
-const API_URL = 'api/';
-
+// Construir a URL base dinamicamente para funcionar em qualquer subpasta (com ou sem barra no final)
+let basePath = window.location.pathname;
+if (basePath.endsWith('index.html')) {
+    basePath = basePath.replace('index.html', '');
+} else if (!basePath.endsWith('/')) {
+    basePath += '/';
+}
+const API_URL = window.location.origin + basePath + 'api/';
 const app = {
     currentView: 'dashboard',
     charts: {},
