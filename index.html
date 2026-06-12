@@ -3,10 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meu Primeiro HTML</title>
+    <title>Gestão de Demandas</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- SortableJS para Kanban -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    
+    <!-- FullCalendar -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+    
+    <!-- Ícones -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
+    
+    <!-- Estilo Principal -->
+    <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
-    <h1>Hello, World!</h1>
-    <p>Esta é a minha primeira página da web.</p>
+
+    <!-- Sidebar Lateral -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="assets/img/logo.png" alt="Logo" class="logo-img" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
+        </div>
+        <nav class="sidebar-nav">
+            <ul>
+                <li class="active" data-view="dashboard"><i class="ri-dashboard-line"></i> Dashboard</li>
+                <li data-view="demandas"><i class="ri-list-check"></i> Demandas</li>
+                <li data-view="kanban"><i class="ri-layout-column-line"></i> Kanban</li>
+                <li data-view="calendario"><i class="ri-calendar-line"></i> Calendário</li>
+                <li data-view="cadastros"><i class="ri-settings-3-line"></i> Cadastros</li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer">
+            <img src="assets/img/brasao.png" alt="Brasão" class="brasao-img" onerror="this.src='https://via.placeholder.com/80x80?text=BRASÃO'">
+        </div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+        <header class="topbar">
+            <div class="topbar-left">
+                <h1 id="page-title">Dashboard</h1>
+            </div>
+            <div class="topbar-right">
+                <div class="clock" id="clockDisplay">--:--</div>
+                <div class="user-profile">
+                    <div class="avatar">A</div>
+                    <span>Admin</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- As views serão injetadas aqui via JS -->
+        </div>
+    </main>
+
+    <!-- Templates de Views (Escondidos) -->
+    
+    <!-- View: Dashboard -->
+    <template id="view-dashboard">
+        <div class="dashboard-kpis">
+            <div class="kpi-card">
+                <h3>TOTAL DEMANDAS</h3>
+                <div class="kpi-value" id="kpi-total">0</div>
+            </div>
+            <div class="kpi-card success">
+                <h3>FINALIZADAS</h3>
+                <div class="kpi-value" id="kpi-finalizadas">0</div>
+            </div>
+            <div class="kpi-card warning">
+                <h3>EM ANDAMENTO</h3>
+                <div class="kpi-value" id="kpi-andamento">0</div>
+            </div>
+            <div class="kpi-card secondary">
+                <h3>ARQUIVADAS</h3>
+                <div class="kpi-value" id="kpi-arquivadas">0</div>
+            </div>
+        </div>
+        
+        <div class="dashboard-charts">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Demandas por Status</h3>
+                    <select id="chart-status-type" class="chart-selector">
+                        <option value="bar">Barra</option>
+                        <option value="pie">Pizza</option>
+                    </select>
+                </div>
+                <canvas id="chartStatus"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Demandas por Tipo</h3>
+                    <select id="chart-tipo-type" class="chart-selector">
+                        <option value="pie">Pizza</option>
+                        <option value="bar">Barra</option>
+                    </select>
+                </div>
+                <canvas id="chartTipo"></canvas>
+            </div>
+        </div>
+    </template>
+
+    <!-- View: Demandas (Lista) -->
+    <template id="view-demandas">
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</button>
+            <div class="filters">
+                <input type="text" id="filter-search" placeholder="Buscar...">
+                <select id="filter-escola"><option value="">Todas Escolas</option></select>
+                <select id="filter-tipo"><option value="">Todos Tipos</option></select>
+                <select id="filter-status"><option value="">Todos Status</option></select>
+                <label><input type="checkbox" id="filter-arquivadas"> Mostrar Arquivadas</label>
+            </div>
+            <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
+        </div>
+        
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Nº</th>
+                        <th>Data</th>
+                        <th>Demandante</th>
+                        <th>Escola</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Responsável</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="demandas-tbody">
+                    <!-- Linhas injetadas via JS -->
+                </tbody>
+            </table>
+        </div>
+    </template>
+
+    <!-- View: Kanban -->
+    <template id="view-kanban">
+        <div class="kanban-board" id="kanbanBoard">
+            <!-- Colunas injetadas via JS -->
+        </div>
+    </template>
+
+    <!-- View: Calendário -->
+    <template id="view-calendario">
+        <div id="calendar-container"></div>
+    </template>
+
+    <!-- View: Cadastros -->
+    <template id="view-cadastros">
+        <div class="cadastros-layout">
+            <div class="cadastros-menu">
+                <ul id="cadastros-tabs">
+                    <li class="active" data-table="escolas">Escolas</li>
+                    <li data-table="funcionarios">Funcionários</li>
+                    <li data-table="demandantes">Demandantes</li>
+                    <li data-table="setores">Setores</li>
+                    <li data-table="tipos_demanda">Tipos de Demanda</li>
+                    <li data-table="status_atendimento">Status Atendimento</li>
+                </ul>
+            </div>
+            <div class="cadastros-content">
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="app.openModalCadastro()"><i class="ri-add-line"></i> Novo Registro</button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead id="cadastro-thead"></thead>
+                        <tbody id="cadastro-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Modal Base Global -->
+    <div class="modal-overlay" id="globalModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Título</h2>
+                <button class="btn-close" onclick="app.closeModal()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Formulário injetado -->
+            </div>
+            <div class="modal-footer" id="modalFooter">
+                <!-- Botões -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script src="assets/js/app.js"></script>
 </body>
 </html>
