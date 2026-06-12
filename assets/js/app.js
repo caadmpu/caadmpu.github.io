@@ -264,20 +264,29 @@ const app = {
     },
 
     async loadFiltrosDemandas() {
-        const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
-        const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
-        const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
-        const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
-        
-        const selEscola = document.getElementById('filter-escola');
-        const selTipo = document.getElementById('filter-tipo');
-        const selStatus = document.getElementById('filter-status');
-        const selCoord = document.getElementById('filter-coordenadoria');
-        
-        escolas.forEach(e => selEscola.innerHTML += `<option value="${e.nome}">${e.nome}</option>`);
-        tipos.forEach(t => selTipo.innerHTML += `<option value="${t.nome}">${t.nome}</option>`);
-        status.forEach(s => selStatus.innerHTML += `<option value="${s.nome}">${s.nome}</option>`);
-        coord.forEach(c => selCoord.innerHTML += `<option value="${c.nome}">${c.nome}</option>`);
+        try {
+            const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
+            const selEscola = document.getElementById('filter-escola');
+            if(selEscola) escolas.forEach(e => selEscola.innerHTML += `<option value="${e.nome}">${e.nome}</option>`);
+        } catch(e) { console.error("Erro ao carregar escolas", e); }
+
+        try {
+            const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
+            const selTipo = document.getElementById('filter-tipo');
+            if(selTipo) tipos.forEach(t => selTipo.innerHTML += `<option value="${t.nome}">${t.nome}</option>`);
+        } catch(e) { console.error("Erro ao carregar tipos", e); }
+
+        try {
+            const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
+            const selStatus = document.getElementById('filter-status');
+            if(selStatus) status.forEach(s => selStatus.innerHTML += `<option value="${s.nome}">${s.nome}</option>`);
+        } catch(e) { console.error("Erro ao carregar status", e); }
+
+        try {
+            const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
+            const selCoord = document.getElementById('filter-coordenadoria');
+            if(selCoord) coord.forEach(c => selCoord.innerHTML += `<option value="${c.nome}">${c.nome}</option>`);
+        } catch(e) { console.error("Erro ao carregar coordenadorias", e); }
     },
 
     async carregarDemandas() {
@@ -287,7 +296,11 @@ const app = {
             let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
             // Filtra no frontend para não perder demandas antigas sem o campo "arquivada"
-            demandas = demandas.filter(d => !!d.arquivada === showArchived);
+            demandas = demandas.filter(d => {
+                let isArq = false;
+                if (d.arquivada === true || d.arquivada === 'true' || d.arquivada === 'sim') isArq = true;
+                return isArq === showArchived;
+            });
             
             demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
             
@@ -299,7 +312,7 @@ const app = {
     },
 
     formatarDataBR(dataISO) {
-        if(!dataISO) return '-';
+        if(!dataISO || typeof dataISO !== 'string') return '-';
         const p = dataISO.split('-');
         if(p.length !== 3) return dataISO;
         return `${p[2]}/${p[1]}/${p[0]}`;
@@ -308,10 +321,17 @@ const app = {
     renderTabelaDemandas(demandas) {
         const tbody = document.getElementById('demandas-tbody');
         tbody.innerHTML = '';
+        
+        if (demandas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma demanda encontrada.</td></tr>';
+            return;
+        }
+
         demandas.forEach(d => {
-            const tr = document.createElement('tr');
-            const cssStatus = d.status_nome ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
-            tr.innerHTML = `
+            try {
+                const tr = document.createElement('tr');
+                const cssStatus = (typeof d.status_nome === 'string') ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
+                tr.innerHTML = `
                 <td>${d.numero_registro || '-'}</td>
                 <td>${this.formatarDataBR(d.data_registro)}</td>
                 <td>${d.demandante_nome || '-'}</td>
@@ -331,6 +351,7 @@ const app = {
                 </td>
             `;
             tbody.appendChild(tr);
+            } catch(e) { console.error("Erro ao renderizar linha:", d, e); }
         });
     },
 
