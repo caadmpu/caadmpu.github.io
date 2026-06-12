@@ -61,7 +61,7 @@ const app = {
 
     showApp() {
         document.getElementById('login-screen').classList.remove('active');
-        document.getElementById('app-container').style.display = 'block';
+        document.getElementById('app-container').style.display = 'flex';
         
         document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
         document.getElementById('user-avatar-initial').innerText = (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
@@ -629,6 +629,131 @@ const app = {
         if(confirm('Excluir este registro?')) {
             await db.collection(window.currentCadastroTable).doc(id).delete();
             this.loadCadastroTable(window.currentCadastroTable);
+        }
+    },
+
+    // --- USUARIOS (ADM) ---
+    async initUsuarios() {
+        const tbody = document.getElementById('usuarios-tbody');
+        tbody.innerHTML = '';
+        const snap = await db.collection('usuarios').get();
+        const usuarios = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        usuarios.forEach(u => {
+            const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
+            
+            let badges = '';
+            if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
+            else {
+                const p = u.permissoes || {};
+                if(p.criar_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Criar</span> ';
+                if(p.editar_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Editar</span> ';
+                if(p.excluir_demandas) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Excluir</span> ';
+                if(p.gerenciar_cadastros) badges += '<span class="badge" style="background:#e2e8f0; color:#333;">Cadastros</span> ';
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${u.id.substring(0,5)}...</td>
+                <td>${u.email}</td>
+                <td>${u.role}</td>
+                <td>${badges}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
+                    ${btnExcluir}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    },
+
+    openModalUsuario(u = null) {
+        const isEdit = !!u;
+        const html = `
+            <form id="userForm">
+                ${isEdit ? `<input type="hidden" name="id" value="${u.id}">` : ''}
+                <div class="form-group">
+                    <label>E-mail</label>
+                    <input type="email" class="form-control" name="email" value="${u ? u.email : ''}" ${isEdit ? 'readonly' : 'required'}>
+                </div>
+                <div class="form-group">
+                    <label>${isEdit ? 'Nova Senha (o usuário deve redefinir pelo Firebase)' : 'Senha Inicial'}</label>
+                    <input type="password" class="form-control" name="senha" ${!isEdit ? 'required' : 'disabled'}>
+                </div>
+                <div class="form-group">
+                    <label>Perfil</label>
+                    <select class="form-control" name="role" id="roleSelect" onchange="document.getElementById('permissoesBox').style.display = this.value === 'COMUM' ? 'block' : 'none'">
+                        <option value="COMUM" ${u && u.role === 'COMUM' ? 'selected' : ''}>Comum</option>
+                        <option value="ADM" ${u && u.role === 'ADM' ? 'selected' : ''}>Administrador</option>
+                    </select>
+                </div>
+                <div id="permissoesBox" style="display: ${!u || u.role === 'COMUM' ? 'block' : 'none'}; background: var(--background); padding: 15px; border-radius: var(--radius-md);">
+                    <strong>Permissões Específicas (Para perfil comum)</strong><br><br>
+                    <label><input type="checkbox" name="perm_criar" value="1" ${u && u.permissoes && u.permissoes.criar_demandas ? 'checked' : ''}> Pode Criar Demandas</label><br>
+                    <label><input type="checkbox" name="perm_editar" value="1" ${u && u.permissoes && u.permissoes.editar_demandas ? 'checked' : ''}> Pode Editar Demandas e Ações</label><br>
+                    <label><input type="checkbox" name="perm_excluir" value="1" ${u && u.permissoes && u.permissoes.excluir_demandas ? 'checked' : ''}> Pode Excluir e Arquivar Demandas</label><br>
+                    <label><input type="checkbox" name="perm_cadastros" value="1" ${u && u.permissoes && u.permissoes.gerenciar_cadastros ? 'checked' : ''}> Pode Gerenciar Cadastros Base</label>
+                </div>
+            </form>
+        `;
+
+        this.openModal(isEdit ? 'Editar Permissões' : 'Novo Usuário', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarUsuario(isEdit) }
+        ]);
+    },
+
+    editarUsuario(u) {
+        this.openModalUsuario(u);
+    },
+
+    async salvarUsuario(isEdit) {
+        const form = document.getElementById('userForm');
+        if(!form.checkValidity()) return form.reportValidity();
+        
+        const fd = new FormData(form);
+        const role = fd.get('role');
+        const email = fd.get('email');
+        const permissoes = {
+            criar_demandas: !!fd.get('perm_criar'),
+            editar_demandas: !!fd.get('perm_editar'),
+            excluir_demandas: !!fd.get('perm_excluir'),
+            gerenciar_cadastros: !!fd.get('perm_cadastros')
+        };
+
+        if(isEdit) {
+            const id = fd.get('id');
+            await db.collection('usuarios').doc(id).update({ role, permissoes });
+            this.closeModal();
+            this.initUsuarios();
+        } else {
+            const senha = fd.get('senha');
+            try {
+                // Cria uma app Firebase secundária para não deslogar o ADM
+                const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
+                const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
+                
+                await db.collection('usuarios').doc(res.user.uid).set({
+                    login: email.split('@')[0],
+                    email: email,
+                    role: role,
+                    permissoes: permissoes
+                });
+                
+                secondaryApp.auth().signOut();
+                secondaryApp.delete();
+
+                this.closeModal();
+                this.initUsuarios();
+            } catch (e) {
+                alert("Erro ao criar usuário: " + e.message);
+            }
+        }
+    },
+
+    async deletarUsuario(id) {
+        if(confirm('Remover acesso deste usuário?')) {
+            await db.collection('usuarios').doc(id).delete();
+            this.initUsuarios();
         }
     },
 
