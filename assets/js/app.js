@@ -677,10 +677,32 @@ const app = {
                 <td>${a.funcionario_nome || '-'}</td>
                 <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-secondary" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                    <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
+                    <button class="btn btn-sm btn-danger-outline" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>
                 </td>
             </tr>
         `).join('');
+    },
+
+    async editarAcaoDetalhe(idAcao) {
+        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        try {
+            const doc = await db.collection('acoes').doc(idAcao).get();
+            if(!doc.exists) return;
+            const a = doc.data();
+
+            this.abrirFormNovaAcao();
+            document.getElementById('detalhe-acao-id').value = idAcao;
+            document.getElementById('detalhe-acao-data').value = a.data_acao;
+            document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
+            document.getElementById('detalhe-acao-descricao').value = a.descricao || '';
+            document.getElementById('detalhe-acao-status').value = a.status_nome || '';
+            
+            // Rola suavemente até o form
+            document.getElementById('detalhe-acao-form-container').scrollIntoView({ behavior: 'smooth' });
+        } catch(e) {
+            console.error(e);
+        }
     },
 
     async salvarAcaoDetalhe() {
@@ -1102,6 +1124,23 @@ const app = {
         this.openModalDemanda(d);
     },
 
+    // Utilidade para gerar cor fixa a partir de uma string
+    getColorForText(str) {
+        if (!str) return { bg: '#e2e8f0', color: '#475569' };
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        const colors = [
+            { bg: '#dbeafe', color: '#1e40af' }, // azul
+            { bg: '#dcfce7', color: '#166534' }, // verde
+            { bg: '#fef3c7', color: '#92400e' }, // amarelo
+            { bg: '#fee2e2', color: '#991b1b' }, // vermelho
+            { bg: '#f3e8ff', color: '#6b21a8' }, // roxo
+            { bg: '#ffedd5', color: '#9a3412' }, // laranja
+            { bg: '#e0e7ff', color: '#3730a3' }  // indigo
+        ];
+        return colors[Math.abs(hash) % colors.length];
+    },
+
     // --- KANBAN ---
     async initKanban() {
         const board = document.getElementById('kanbanBoard');
@@ -1122,12 +1161,18 @@ const app = {
             col.innerHTML = `
                 <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
                 <div class="kanban-items" data-status="${s.nome}">
-                    ${colDemandas.map(d => `
-                        <div class="kanban-card" data-id="${d.id}">
+                    ${colDemandas.map(d => {
+                        const coordColor = this.getColorForText(d.coordenadoria_nome);
+                        const tipoColor = this.getColorForText(d.tipo_nome);
+                        return `
+                        <div class="kanban-card" data-id="${d.id}" style="border-left: 4px solid var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color));">
                             <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
-                            <div class="kanban-card-meta">${d.tipo_nome || 'Sem tipo'}</div>
+                            <div class="kanban-card-meta">
+                                <span class="badge" style="background:${coordColor.bg}; color:${coordColor.color};">${d.coordenadoria_nome || '-'}</span> 
+                                <span class="badge" style="background:${tipoColor.bg}; color:${tipoColor.color};">${d.tipo_nome || '-'}</span>
+                            </div>
                         </div>
-                    `).join('')}
+                        `}).join('')}
                 </div>
             `;
             board.appendChild(col);
@@ -1161,7 +1206,9 @@ const app = {
         const events = demandas.filter(d => d.data_registro).map(d => ({
             title: `#${d.numero_registro} ${d.escola_nome}`,
             start: d.data_registro,
-            url: `javascript:app.editarDemanda('${d.id}')`
+            url: `javascript:app.abrirDetalhesDemanda('${d.id}')`,
+            backgroundColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`,
+            borderColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`
         }));
 
         this.calendar = new FullCalendar.Calendar(container, {
