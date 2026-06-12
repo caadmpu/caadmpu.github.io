@@ -157,6 +157,8 @@
     <template id="view-demandas">
         <div class="toolbar">
             <button class="btn btn-primary" onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</button>
+            <button class="btn btn-secondary" onclick="app.openModalImportar()"><i class="ri-file-excel-line"></i> Importar Colar (Excel)</button>
+            <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
             <div class="filters">
                 <input type="text" id="filter-search" placeholder="Buscar...">
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>

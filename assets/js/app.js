@@ -522,6 +522,92 @@ const app = {
         this.carregarDemandas();
     },
 
+    openModalImportar() {
+        if(!this.temPermissao('criar_demandas')) return alert("Sem permissão");
+        
+        const html = `
+            <div class="alert alert-info" style="margin-bottom: 15px; padding: 15px; background: #e0f2fe; border-radius: 8px; color: #0369a1; border: 1px solid #bae6fd;">
+                <strong>Instruções de Importação:</strong><br>
+                1. Abra sua planilha do Excel.<br>
+                2. Selecione as linhas contendo os dados (copie APENAS as linhas, não copie o cabeçalho).<br>
+                3. Cole no campo abaixo (usando Ctrl+V).<br><br>
+                <em>Aviso: A ordem esperada das colunas na planilha deve ser exatamente:<br>
+                Data | Tipo | Status | Demandante | Função | Escola | Servidor Resp. | Matrícula | Descrição | Arquivada</em>
+            </div>
+            <textarea id="importText" class="form-control" rows="8" placeholder="Cole os dados do Excel aqui..."></textarea>
+        `;
+
+        this.openModal('Importar Demandas em Massa (Excel)', html, [
+            { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() },
+            { label: 'Processar e Importar', class: 'btn-primary', action: () => this.processarImportacao() }
+        ]);
+    },
+
+    async processarImportacao() {
+        const text = document.getElementById('importText').value.trim();
+        if(!text) return alert("Cole os dados primeiro!");
+
+        const linhas = text.split('\n');
+        let sucesso = 0;
+
+        document.getElementById('modalFooter').innerHTML = '<span>Importando... aguarde.</span>';
+
+        for(let linha of linhas) {
+            const cols = linha.split('\t');
+            if(cols.length < 8) continue; // Pula linhas inválidas ou curtas
+
+            // Parse da Data (de DD/MM/YYYY para YYYY-MM-DD)
+            let dataFormated = cols[0].trim();
+            if (dataFormated.includes('/')) {
+                const parts = dataFormated.split('/');
+                if (parts.length === 3) dataFormated = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+
+            const tipo = cols[1]?.trim() || '';
+            const status = cols[2]?.trim() || '';
+            const demandante = cols[3]?.trim() || '';
+            const escola = cols[5]?.trim() || '';
+            const servidor = cols[6]?.trim() || '';
+            const descricao = cols[8]?.trim() || '';
+            const arquivadaStr = cols[9]?.trim().toLowerCase() || 'não';
+            const arquivada = (arquivadaStr === 'sim' || arquivadaStr === 'true');
+
+            // Salva a demanda
+            await db.collection('demandas').add({
+                data_registro: dataFormated,
+                numero_registro: Math.floor(Math.random() * 90000) + 10000,
+                tipo_nome: tipo,
+                status_nome: status,
+                demandante_nome: demandante,
+                escola_nome: escola,
+                funcionario_nome: servidor,
+                descricao: descricao,
+                arquivada: arquivada
+            });
+
+            // Auto-cadastrar nas tabelas base para preencher os dropdowns (se não existirem)
+            await this.autoCadastrarBase('tipos_demanda', tipo);
+            await this.autoCadastrarBase('status_atendimento', status);
+            await this.autoCadastrarBase('escolas', escola);
+            await this.autoCadastrarBase('demandantes', demandante);
+            await this.autoCadastrarBase('funcionarios', servidor);
+            
+            sucesso++;
+        }
+
+        this.closeModal();
+        alert(`${sucesso} demandas importadas com sucesso!`);
+        this.carregarDemandas();
+    },
+
+    async autoCadastrarBase(tabela, nome) {
+        if(!nome || nome === '-' || nome.toUpperCase() === 'NÃO SE APLICA') return;
+        const snap = await db.collection(tabela).where('nome', '==', nome).get();
+        if(snap.empty) {
+            await db.collection(tabela).add({ nome: nome });
+        }
+    },
+
     editarDemanda(id) {
         if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
         alert('Edição: Na versão completa isso abrirá os detalhes.');
