@@ -305,6 +305,11 @@ const app = {
             demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
             
             window.todasDemandas = demandas;
+            
+            // DEBUG VISUAL: Mostra no botão quantas demandas o Firebase devolveu antes do filtro
+            const btnNew = document.querySelector('.toolbar .btn-primary');
+            if(btnNew) btnNew.innerHTML = `<i class="ri-add-line"></i> Nova Demanda (Total BD: ${snap.docs.length} | Filtradas: ${demandas.length})`;
+
             this.renderTabelaDemandas(window.todasDemandas);
         } catch(e) {
             console.error("Erro ao carregar demandas:", e);
