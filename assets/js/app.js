@@ -356,7 +356,12 @@ const app = {
                 </td>
             `;
             tbody.appendChild(tr);
-            } catch(e) { console.error("Erro ao renderizar linha:", d, e); }
+            } catch(e) { 
+                const errTr = document.createElement('tr');
+                errTr.innerHTML = `<td colspan="9" style="color:red;">Erro ao renderizar: ${e.message} - ${e.stack}</td>`;
+                tbody.appendChild(errTr);
+                console.error("Erro ao renderizar linha:", d, e); 
+            }
         });
     },
 
