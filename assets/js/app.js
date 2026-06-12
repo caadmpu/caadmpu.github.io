@@ -1,19 +1,32 @@
-// Construir a URL base dinamicamente para funcionar em qualquer subpasta (com ou sem barra no final)
-let basePath = window.location.pathname;
-if (basePath.endsWith('index.html')) {
-    basePath = basePath.replace('index.html', '');
-} else if (!basePath.endsWith('/')) {
-    basePath += '/';
+// ==========================================
+// CONFIGURAÇÃO DO FIREBASE (AÇÃO NECESSÁRIA)
+// ==========================================
+// Cole o firebaseConfig fornecido pelo Firebase Console aqui:
+const firebaseConfig = {
+    apiKey: "AIzaSyDPYJhmsmGuLQePcWGH11RSLopL5LEovOM",
+    authDomain: "gestao-demandas-app.firebaseapp.com",
+    projectId: "gestao-demandas-app",
+    storageBucket: "gestao-demandas-app.firebasestorage.app",
+    messagingSenderId: "764489719142",
+    appId: "1:764489719142:web:da557215d9f0abc1f3bca7",
+    measurementId: "G-TX5P8C0258"
+};
+
+// Inicializa Firebase
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
 }
-const API_URL = window.location.origin + basePath + 'api/';
+const db = firebase.firestore();
+const auth = firebase.auth();
+
 const app = {
     currentView: 'dashboard',
     charts: {},
     calendar: null,
     kanbanSortables: [],
-    user: null,
+    userDoc: null,
 
-    async init() {
+    init() {
         this.bindNav();
         this.startClock();
         
@@ -22,17 +35,23 @@ const app = {
             if (e.target.id === 'globalModal') this.closeModal();
         });
 
-        await this.checkSession();
-    },
-
-    async checkSession() {
-        const res = await fetch(API_URL + 'auth.php?action=check');
-        if (res.ok) {
-            this.user = await res.json();
-            this.showApp();
-        } else {
-            this.showLogin();
-        }
+        // Monitora o status de login via Firebase Auth
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                // Busca as permissões extras no Firestore
+                const doc = await db.collection('usuarios').doc(user.uid).get();
+                if(doc.exists) {
+                    this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
+                } else {
+                    // Fallback se não existir documento ainda
+                    this.userDoc = { uid: user.uid, email: user.email, role: 'COMUM', permissoes: {} };
+                }
+                this.showApp();
+            } else {
+                this.userDoc = null;
+                this.showLogin();
+            }
+        });
     },
 
     showLogin() {
@@ -44,10 +63,10 @@ const app = {
         document.getElementById('login-screen').classList.remove('active');
         document.getElementById('app-container').style.display = 'block';
         
-        document.getElementById('user-name-display').innerText = this.user.login;
-        document.getElementById('user-avatar-initial').innerText = this.user.login.charAt(0).toUpperCase();
+        document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
+        document.getElementById('user-avatar-initial').innerText = (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
         
-        if (this.user.role === 'ADM') {
+        if (this.userDoc.role === 'ADM') {
             document.getElementById('menu-usuarios').style.display = 'flex';
         } else {
             document.getElementById('menu-usuarios').style.display = 'none';
@@ -57,33 +76,28 @@ const app = {
     },
 
     async doLogin() {
-        const login = document.getElementById('login_user').value;
+        const email = document.getElementById('login_user').value;
         const pass = document.getElementById('login_pass').value;
         const errDiv = document.getElementById('login_error');
         errDiv.innerText = '';
         
         try {
-            const res = await fetch(API_URL + 'auth.php?action=login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: login, senha: pass })
-            });
-            const data = await res.json();
-            
-            if (res.ok && data.success) {
-                this.checkSession();
-            } else {
-                errDiv.innerText = data.error || 'Erro ao logar';
-            }
-        } catch (e) {
-            errDiv.innerText = 'Erro de comunicação';
+            await auth.signInWithEmailAndPassword(email, pass);
+            // onAuthStateChanged cuidará do redirecionamento
+        } catch (error) {
+            errDiv.innerText = "Erro: " + error.message;
         }
     },
 
     async doLogout() {
-        await fetch(API_URL + 'auth.php?action=logout');
-        this.user = null;
-        this.showLogin();
+        await auth.signOut();
+    },
+
+    // Segurança Frontend (Opcional, pois as regras do Firestore devem ser configuradas depois)
+    temPermissao(acao) {
+        if (!this.userDoc) return false;
+        if (this.userDoc.role === 'ADM') return true;
+        return !!this.userDoc.permissoes[acao];
     },
 
     startClock() {
@@ -106,31 +120,10 @@ const app = {
         });
     },
 
-    async request(endpoint, method = 'GET', data = null) {
-        const options = { method };
-        if (data) {
-            options.body = JSON.stringify(data);
-            options.headers = { 'Content-Type': 'application/json' };
-        }
-        try {
-            const res = await fetch(API_URL + endpoint, options);
-            if (res.status === 401) {
-                this.showLogin();
-                throw new Error('Não autenticado');
-            }
-            const resData = await res.json();
-            if (!res.ok) {
-                alert(resData.error || 'Erro na operação');
-                throw new Error(resData.error);
-            }
-            return resData;
-        } catch (err) {
-            console.error(err);
-            return null;
-        }
-    },
-
     loadView(view) {
+        // Bloqueia visão de usuários se não for ADM
+        if (view === 'usuarios' && (!this.userDoc || this.userDoc.role !== 'ADM')) return;
+
         this.currentView = view;
         const container = document.getElementById('contentArea');
         const template = document.getElementById(`view-${view}`);
@@ -141,7 +134,8 @@ const app = {
             'demandas': 'Demandas',
             'kanban': 'Quadro Kanban',
             'calendario': 'Calendário de Ações',
-            'cadastros': 'Cadastros Básicos'
+            'cadastros': 'Cadastros Básicos',
+            'usuarios': 'Gerenciamento de Usuários'
         };
         document.getElementById('page-title').innerText = titles[view] || view;
 
@@ -155,22 +149,39 @@ const app = {
 
     // --- DASHBOARD ---
     async initDashboard() {
-        const data = await this.request('demandas.php?action=kpi');
-        if (!data) return;
+        const snap = await db.collection('demandas').get();
+        const demandas = snap.docs.map(d => d.data());
+        
+        let finalizadas = 0, andamento = 0, arquivadas = 0;
+        const statusCount = {};
+        const tipoCount = {};
 
-        document.getElementById('kpi-total').innerText = data.TOTAL_DEMANDAS;
-        document.getElementById('kpi-finalizadas').innerText = data.FINALIZADAS;
-        document.getElementById('kpi-andamento').innerText = data.EM_ANDAMENTO;
-        document.getElementById('kpi-arquivadas').innerText = data.ARQUIVADAS;
+        demandas.forEach(d => {
+            if (d.arquivada) arquivadas++;
+            else {
+                if (d.status_nome === 'FINALIZADA') finalizadas++;
+                if (d.status_nome === 'EM ANDAMENTO') andamento++;
+            }
+            statusCount[d.status_nome] = (statusCount[d.status_nome] || 0) + 1;
+            tipoCount[d.tipo_nome] = (tipoCount[d.tipo_nome] || 0) + 1;
+        });
 
-        this.renderChart('chartStatus', data.grafico_status, 'bar');
-        this.renderChart('chartTipo', data.grafico_tipo, 'pie');
+        document.getElementById('kpi-total').innerText = demandas.length;
+        document.getElementById('kpi-finalizadas').innerText = finalizadas;
+        document.getElementById('kpi-andamento').innerText = andamento;
+        document.getElementById('kpi-arquivadas').innerText = arquivadas;
+
+        const graficoStatus = Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]}));
+        const graficoTipo = Object.keys(tipoCount).map(k => ({label: k || 'S/N', value: tipoCount[k]}));
+
+        this.renderChart('chartStatus', graficoStatus, 'bar');
+        this.renderChart('chartTipo', graficoTipo, 'pie');
         
         document.getElementById('chart-status-type').addEventListener('change', (e) => {
-            this.renderChart('chartStatus', data.grafico_status, e.target.value);
+            this.renderChart('chartStatus', graficoStatus, e.target.value);
         });
         document.getElementById('chart-tipo-type').addEventListener('change', (e) => {
-            this.renderChart('chartTipo', data.grafico_tipo, e.target.value);
+            this.renderChart('chartTipo', graficoTipo, e.target.value);
         });
     },
 
@@ -208,9 +219,9 @@ const app = {
     },
 
     async loadFiltrosDemandas() {
-        const escolas = await this.request('cadastros.php?tabela=escolas&action=list');
-        const tipos = await this.request('cadastros.php?tabela=tipos_demanda&action=list');
-        const status = await this.request('cadastros.php?tabela=status_atendimento&action=list');
+        const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
+        const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
+        const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
         
         const selEscola = document.getElementById('filter-escola');
         const selTipo = document.getElementById('filter-tipo');
@@ -222,10 +233,10 @@ const app = {
     },
 
     async carregarDemandas() {
-        const showArchived = document.getElementById('filter-arquivadas').checked ? '1' : '0';
-        const demandas = await this.request(`demandas.php?action=list&arquivadas=${showArchived}`);
-        window.todasDemandas = demandas; // Cache for filtering
-        this.renderTabelaDemandas(demandas);
+        const showArchived = document.getElementById('filter-arquivadas').checked;
+        const snap = await db.collection('demandas').where('arquivada', '==', showArchived).orderBy('data_registro', 'desc').get();
+        window.todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        this.renderTabelaDemandas(window.todasDemandas);
     },
 
     renderTabelaDemandas(demandas) {
@@ -235,20 +246,20 @@ const app = {
             const tr = document.createElement('tr');
             const cssStatus = d.status_nome ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
             tr.innerHTML = `
-                <td>#${d.numero_registro || d.id}</td>
-                <td>${d.data_registro.split(' ')[0]}</td>
+                <td>#${d.numero_registro || d.id.substring(0,5)}</td>
+                <td>${d.data_registro || '-'}</td>
                 <td>${d.demandante_nome || '-'}</td>
                 <td>${d.escola_nome || '-'}</td>
                 <td>${d.tipo_nome || '-'}</td>
                 <td><span class="badge badge-${cssStatus}">${d.status_nome || '-'}</span></td>
                 <td>${d.funcionario_nome || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda(${d.id})"><i class="ri-edit-line"></i></button>
-                    ${d.arquivada == 1 
-                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda(${d.id})"><i class="ri-inbox-unarchive-line"></i></button>`
-                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda(${d.id})"><i class="ri-inbox-archive-line"></i></button>`
+                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')"><i class="ri-edit-line"></i></button>
+                    ${d.arquivada 
+                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')"><i class="ri-inbox-unarchive-line"></i></button>`
+                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')"><i class="ri-inbox-archive-line"></i></button>`
                     }
-                    <button class="btn btn-sm btn-primary" onclick="app.verAcoes(${d.id})"><i class="ri-history-line"></i></button>
+                    <button class="btn btn-sm btn-primary" onclick="app.verAcoes('${d.id}')"><i class="ri-history-line"></i></button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -294,24 +305,28 @@ const app = {
     },
 
     async arquivarDemanda(id) {
+        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
         if(confirm('Arquivar esta demanda?')) {
-            await this.request('demandas.php?action=archive', 'POST', {id});
+            await db.collection('demandas').doc(id).update({ arquivada: true });
             this.carregarDemandas();
         }
     },
     
     async desarquivarDemanda(id) {
+        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
         if(confirm('Desarquivar esta demanda?')) {
-            await this.request('demandas.php?action=unarchive', 'POST', {id});
+            await db.collection('demandas').doc(id).update({ arquivada: false });
             this.carregarDemandas();
         }
     },
 
+    // Ações da Demanda
     async verAcoes(id) {
-        const acoes = await this.request(`acoes.php?action=list&demanda_id=${id}`);
+        const snap = await db.collection('acoes').where('demanda_id', '==', id).orderBy('data_acao', 'asc').get();
+        const acoes = snap.docs.map(d => d.data());
         let html = `
             <div style="margin-bottom: 15px;">
-                <button class="btn btn-sm btn-primary" onclick="app.novaAcao(${id})"><i class="ri-add-line"></i> Nova Ação</button>
+                <button class="btn btn-sm btn-primary" onclick="app.novaAcao('${id}')"><i class="ri-add-line"></i> Nova Ação</button>
             </div>
             <table class="data-table">
                 <thead><tr><th>Data</th><th>Descrição</th><th>Funcionário</th><th>Status Momento</th></tr></thead>
@@ -326,7 +341,146 @@ const app = {
             </tr>`;
         });
         html += `</tbody></table>`;
-        this.openModal('Histórico de Ações (Demanda #' + id + ')', html, []);
+        this.openModal('Histórico de Ações', html, []);
+    },
+
+    async novaAcao(demanda_id) {
+        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+
+        const funcSnap = await db.collection('funcionarios').get();
+        const funcionarios = funcSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        const statSnap = await db.collection('status_atendimento').get();
+        const status = statSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        const html = `
+            <form id="acaoForm">
+                <input type="hidden" name="demanda_id" value="${demanda_id}">
+                <div class="form-group">
+                    <label>Descrição da Ação</label>
+                    <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Responsável (Funcionário)</label>
+                    <select class="form-control" name="funcionario_nome">
+                        <option value="">Selecione...</option>
+                        ${funcionarios.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Mudar Status da Demanda para (Opcional)</label>
+                    <select class="form-control" name="status_nome">
+                        <option value="">Manter Status Atual</option>
+                        ${status.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                    </select>
+                </div>
+            </form>
+        `;
+        
+        this.openModal('Registrar Ação', html, [
+            { label: 'Salvar', class: 'btn-primary', action: async () => {
+                const form = document.getElementById('acaoForm');
+                if(!form.checkValidity()) return form.reportValidity();
+                const fd = new FormData(form);
+                
+                await db.collection('acoes').add({
+                    demanda_id: demanda_id,
+                    descricao: fd.get('descricao'),
+                    funcionario_nome: fd.get('funcionario_nome'),
+                    status_nome: fd.get('status_nome'),
+                    data_acao: new Date().toISOString().split('T')[0]
+                });
+
+                if (fd.get('status_nome')) {
+                    await db.collection('demandas').doc(demanda_id).update({ status_nome: fd.get('status_nome') });
+                }
+                
+                this.closeModal();
+                this.verAcoes(demanda_id);
+            } }
+        ]);
+    },
+
+    // Nova Demanda
+    async openModalDemanda() {
+        if(!this.temPermissao('criar_demandas')) return alert("Sem permissão");
+
+        const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
+        const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
+        const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
+        const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
+        const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
+
+        const html = `
+            <form id="demandaForm">
+                <div class="form-group">
+                    <label>Descrição</label>
+                    <textarea class="form-control" name="descricao" rows="3" required></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                    <div class="form-group">
+                        <label>Demandante</label>
+                        <select class="form-control" name="demandante_nome">
+                            <option value="">Selecione...</option>
+                            ${dem.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Escola</label>
+                        <select class="form-control" name="escola_nome">
+                            <option value="">Selecione...</option>
+                            ${escolas.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select class="form-control" name="tipo_nome">
+                            <option value="">Selecione...</option>
+                            ${tipos.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status Inicial</label>
+                        <select class="form-control" name="status_nome">
+                            <option value="">Selecione...</option>
+                            ${status.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Responsável</label>
+                        <select class="form-control" name="funcionario_nome">
+                            <option value="">Selecione...</option>
+                            ${func.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Processo SIGED</label>
+                        <input class="form-control" name="processo_siged">
+                    </div>
+                </div>
+            </form>
+        `;
+
+        this.openModal('Nova Demanda', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda() }
+        ]);
+    },
+
+    async salvarDemanda() {
+        const form = document.getElementById('demandaForm');
+        if(!form.checkValidity()) return form.reportValidity();
+        const data = Object.fromEntries(new FormData(form));
+        data.arquivada = false;
+        data.data_registro = new Date().toISOString().split('T')[0];
+        data.numero_registro = Math.floor(Math.random() * 90000) + 10000; // Mock ID
+
+        await db.collection('demandas').add(data);
+        this.closeModal();
+        this.carregarDemandas();
+    },
+
+    editarDemanda(id) {
+        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        alert('Edição: Na versão completa isso abrirá os detalhes.');
     },
 
     // --- KANBAN ---
@@ -336,19 +490,22 @@ const app = {
         this.kanbanSortables.forEach(s => s.destroy());
         this.kanbanSortables = [];
 
-        const statusList = await this.request('cadastros.php?tabela=status_atendimento&action=list');
-        const demandas = await this.request('demandas.php?action=list&arquivadas=0');
+        const statusSnap = await db.collection('status_atendimento').get();
+        const statusList = statusSnap.docs.map(d => d.data());
+
+        const demSnap = await db.collection('demandas').where('arquivada', '==', false).get();
+        const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
 
         statusList.forEach(s => {
-            const colDemandas = demandas.filter(d => d.status_id == s.id);
+            const colDemandas = demandas.filter(d => d.status_nome == s.nome);
             const col = document.createElement('div');
             col.className = 'kanban-column';
             col.innerHTML = `
                 <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
-                <div class="kanban-items" data-status-id="${s.id}">
+                <div class="kanban-items" data-status="${s.nome}">
                     ${colDemandas.map(d => `
                         <div class="kanban-card" data-id="${d.id}">
-                            <div class="kanban-card-title">#${d.numero_registro || d.id} - ${d.escola_nome || 'Sem escola'}</div>
+                            <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
                             <div class="kanban-card-meta">${d.tipo_nome || 'Sem tipo'}</div>
                         </div>
                     `).join('')}
@@ -357,38 +514,35 @@ const app = {
             board.appendChild(col);
         });
 
-        // Initialize Sortable
-        document.querySelectorAll('.kanban-items').forEach(el => {
-            this.kanbanSortables.push(new Sortable(el, {
-                group: 'kanban',
-                animation: 150,
-                onEnd: async (evt) => {
-                    const itemEl = evt.item;
-                    const toList = evt.to;
-                    const newStatusId = toList.getAttribute('data-status-id');
-                    const demandaId = itemEl.getAttribute('data-id');
-                    
-                    await this.request('demandas.php?action=update_status', 'POST', {
-                        id: demandaId,
-                        status_id: newStatusId
-                    });
-                    this.initKanban(); // Reload counts
-                }
-            }));
-        });
+        if(this.temPermissao('editar_demandas')) {
+            document.querySelectorAll('.kanban-items').forEach(el => {
+                this.kanbanSortables.push(new Sortable(el, {
+                    group: 'kanban',
+                    animation: 150,
+                    onEnd: async (evt) => {
+                        const itemEl = evt.item;
+                        const toList = evt.to;
+                        const newStatus = toList.getAttribute('data-status');
+                        const demandaId = itemEl.getAttribute('data-id');
+                        
+                        await db.collection('demandas').doc(demandaId).update({ status_nome: newStatus });
+                        this.initKanban(); // Recalcula totais
+                    }
+                }));
+            });
+        }
     },
 
     // --- CALENDÁRIO ---
     async initCalendario() {
         const container = document.getElementById('calendar-container');
-        const acoes = await this.request('acoes.php?action=list_all'); // Precisaria criar endpoint list_all, simplificando:
-        // Como o prompt pede calendario de manutenções, usamos a data_registro ou ações.
-        const demandas = await this.request('demandas.php?action=list&arquivadas=0');
+        const snap = await db.collection('demandas').where('arquivada', '==', false).get();
+        const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
         
-        const events = demandas.map(d => ({
+        const events = demandas.filter(d => d.data_registro).map(d => ({
             title: `#${d.numero_registro} ${d.escola_nome}`,
-            start: d.data_registro.split(' ')[0],
-            url: `javascript:app.editarDemanda(${d.id})`
+            start: d.data_registro,
+            url: `javascript:app.editarDemanda('${d.id}')`
         }));
 
         this.calendar = new FullCalendar.Calendar(container, {
@@ -399,7 +553,7 @@ const app = {
         this.calendar.render();
     },
 
-    // --- CADASTROS ---
+    // --- CADASTROS BASE ---
     async initCadastros() {
         const tabs = document.querySelectorAll('#cadastros-tabs li');
         tabs.forEach(t => t.addEventListener('click', (e) => {
@@ -407,12 +561,13 @@ const app = {
             e.currentTarget.classList.add('active');
             this.loadCadastroTable(e.currentTarget.getAttribute('data-table'));
         }));
-        this.loadCadastroTable('escolas'); // Default
+        this.loadCadastroTable('escolas');
     },
 
     async loadCadastroTable(tabela) {
         window.currentCadastroTable = tabela;
-        const data = await this.request(`cadastros.php?tabela=${tabela}&action=list`);
+        const snap = await db.collection(tabela).get();
+        const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
         
         const thead = document.getElementById('cadastro-thead');
         const tbody = document.getElementById('cadastro-tbody');
@@ -423,23 +578,23 @@ const app = {
             return;
         }
 
-        const keys = Object.keys(data[0]);
+        const keys = Object.keys(data[0]).filter(k => k !== 'id');
         let ths = keys.map(k => `<th>${k}</th>`).join('');
         thead.innerHTML = `<tr>${ths}<th>Ações</th></tr>`;
 
         data.forEach(row => {
             let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
             tbody.innerHTML += `<tr>${tds}<td>
-                <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro(${row.id})"><i class="ri-delete-bin-line"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
             </td></tr>`;
         });
     },
 
-    async openModalCadastro() {
+    openModalCadastro() {
+        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
         const tabela = window.currentCadastroTable;
         let html = `<form id="cadastroForm">`;
         
-        // Simples form builder dependendo da tabela
         const fields = {
             'escolas': ['nome', 'sigeam', 'inep'],
             'funcionarios': ['nome', 'cargo', 'funcao', 'matricula', 'portaria'],
@@ -462,27 +617,54 @@ const app = {
     async salvarCadastro() {
         const form = document.getElementById('cadastroForm');
         if(!form.checkValidity()) return form.reportValidity();
+        const data = Object.fromEntries(new FormData(form).entries());
         
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        
-        await this.request(`cadastros.php?tabela=${window.currentCadastroTable}&action=create`, 'POST', data);
+        await db.collection(window.currentCadastroTable).add(data);
         this.closeModal();
         this.loadCadastroTable(window.currentCadastroTable);
     },
 
     async deletarCadastro(id) {
+        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
         if(confirm('Excluir este registro?')) {
-            await this.request(`cadastros.php?tabela=${window.currentCadastroTable}&action=delete`, 'POST', {id});
+            await db.collection(window.currentCadastroTable).doc(id).delete();
             this.loadCadastroTable(window.currentCadastroTable);
         }
     },
 
-    // --- MODAL UTIL ---
+    // --- SETUP INICIAL FIREBASE ---
+    async setupFirebaseBase() {
+        try {
+            // Cria os status padrões
+            const statusList = ['EM ANDAMENTO', 'FINALIZADA', 'ARQUIVADA', 'Não Resolvido', 'Não se aplica'];
+            for(let s of statusList) { await db.collection('status_atendimento').add({ nome: s }); }
+            
+            // Cria tipos padrões
+            const tiposList = ['Elétrica', 'Hidráulica', 'Telhado', 'Forro', 'Poço Artesiano', 'Fossa Séptica'];
+            for(let t of tiposList) { await db.collection('tipos_demanda').add({ nome: t }); }
+            
+            // Cria conta Admin Inicial via Auth
+            // IMPORTANTE: Isso registrará admin@admin.com com a senha admin123
+            const cred = await auth.createUserWithEmailAndPassword('admin@admin.com', 'admin123');
+            
+            // Grava documento do admin
+            await db.collection('usuarios').doc(cred.user.uid).set({
+                login: 'admin',
+                email: 'admin@admin.com',
+                role: 'ADM',
+                permissoes: {}
+            });
+
+            alert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123');
+        } catch(e) {
+            alert('Erro no setup: ' + e.message);
+        }
+    },
+
+    // --- MODAL BASE ---
     openModal(title, html, buttons = []) {
         document.getElementById('modalTitle').innerText = title;
         document.getElementById('modalBody').innerHTML = html;
-        
         const footer = document.getElementById('modalFooter');
         footer.innerHTML = '';
         buttons.forEach(b => {
@@ -492,237 +674,11 @@ const app = {
             btn.onclick = b.action;
             footer.appendChild(btn);
         });
-        
         document.getElementById('globalModal').classList.add('active');
-    },
-
-    // --- USUARIOS (ADM) ---
-    async initUsuarios() {
-        const tbody = document.getElementById('usuarios-tbody');
-        tbody.innerHTML = '';
-        const usuarios = await this.request('usuarios.php?action=list');
-        if (!usuarios) return;
-        
-        usuarios.forEach(u => {
-            const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario(${u.id})"><i class="ri-delete-bin-line"></i></button>`;
-            
-            let badges = '';
-            if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
-            else {
-                const p = u.permissoes;
-                if(p.criar_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Criar</span> ';
-                if(p.editar_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Editar</span> ';
-                if(p.excluir_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Excluir</span> ';
-                if(p.gerenciar_cadastros) badges += '<span class="badge" style="background:#e2e8f0;">Cadastros</span> ';
-            }
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${u.id}</td>
-                <td>${u.login}</td>
-                <td>${u.role}</td>
-                <td>${badges}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
-                    ${btnExcluir}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    },
-
-    openModalUsuario(u = null) {
-        const isEdit = !!u;
-        const html = `
-            <form id="userForm">
-                ${isEdit ? `<input type="hidden" name="id" value="${u.id}">` : ''}
-                <div class="form-group">
-                    <label>Login</label>
-                    <input type="text" class="form-control" name="login" value="${u ? u.login : ''}" required>
-                </div>
-                <div class="form-group">
-                    <label>${isEdit ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}</label>
-                    <input type="password" class="form-control" name="senha" ${!isEdit ? 'required' : ''}>
-                </div>
-                <div class="form-group">
-                    <label>Perfil</label>
-                    <select class="form-control" name="role" id="roleSelect" onchange="document.getElementById('permissoesBox').style.display = this.value === 'COMUM' ? 'block' : 'none'">
-                        <option value="COMUM" ${u && u.role === 'COMUM' ? 'selected' : ''}>Comum</option>
-                        <option value="ADM" ${u && u.role === 'ADM' ? 'selected' : ''}>Administrador</option>
-                    </select>
-                </div>
-                <div id="permissoesBox" style="display: ${!u || u.role === 'COMUM' ? 'block' : 'none'}; background: var(--background); padding: 15px; border-radius: var(--radius-md);">
-                    <strong>Permissões Específicas (Para perfil comum)</strong><br><br>
-                    <label><input type="checkbox" name="perm_criar" value="1" ${u && u.permissoes.criar_demandas ? 'checked' : ''}> Pode Criar Demandas</label><br>
-                    <label><input type="checkbox" name="perm_editar" value="1" ${u && u.permissoes.editar_demandas ? 'checked' : ''}> Pode Editar Demandas e Ações</label><br>
-                    <label><input type="checkbox" name="perm_excluir" value="1" ${u && u.permissoes.excluir_demandas ? 'checked' : ''}> Pode Excluir e Arquivar Demandas</label><br>
-                    <label><input type="checkbox" name="perm_cadastros" value="1" ${u && u.permissoes.gerenciar_cadastros ? 'checked' : ''}> Pode Gerenciar Cadastros Base</label>
-                </div>
-            </form>
-        `;
-
-        this.openModal(isEdit ? 'Editar Usuário' : 'Novo Usuário', html, [
-            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarUsuario(isEdit) }
-        ]);
-    },
-
-    editarUsuario(u) {
-        this.openModalUsuario(u);
-    },
-
-    async salvarUsuario(isEdit) {
-        const form = document.getElementById('userForm');
-        if(!form.checkValidity()) return form.reportValidity();
-        
-        const fd = new FormData(form);
-        const data = {
-            login: fd.get('login'),
-            senha: fd.get('senha'),
-            role: fd.get('role'),
-            permissoes: {
-                criar_demandas: !!fd.get('perm_criar'),
-                editar_demandas: !!fd.get('perm_editar'),
-                excluir_demandas: !!fd.get('perm_excluir'),
-                gerenciar_cadastros: !!fd.get('perm_cadastros')
-            }
-        };
-        if(isEdit) data.id = fd.get('id');
-
-        const endpoint = isEdit ? 'usuarios.php?action=update' : 'usuarios.php?action=create';
-        const res = await this.request(endpoint, 'POST', data);
-        
-        if (res && res.success) {
-            this.closeModal();
-            this.initUsuarios();
-        }
-    },
-
-    async deletarUsuario(id) {
-        if(confirm('Tem certeza que deseja excluir este usuário?')) {
-            const res = await this.request('usuarios.php?action=delete', 'POST', {id});
-            if (res && res.success) this.initUsuarios();
-        }
     },
 
     closeModal() {
         document.getElementById('globalModal').classList.remove('active');
-    },
-
-    // --- FORMS DEMANDA ---
-    async openModalDemanda() {
-        const escolas = await this.request('cadastros.php?tabela=escolas&action=list');
-        const tipos = await this.request('cadastros.php?tabela=tipos_demanda&action=list');
-        const status = await this.request('cadastros.php?tabela=status_atendimento&action=list');
-        const funcionarios = await this.request('cadastros.php?tabela=funcionarios&action=list');
-        const demandantes = await this.request('cadastros.php?tabela=demandantes&action=list');
-
-        const html = `
-            <form id="demandaForm">
-                <div class="form-group">
-                    <label>Descrição</label>
-                    <textarea class="form-control" name="descricao" rows="3" required></textarea>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-                    <div class="form-group">
-                        <label>Demandante</label>
-                        <select class="form-control" name="demandante_id">
-                            <option value="">Selecione...</option>
-                            ${demandantes.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Escola</label>
-                        <select class="form-control" name="escola_id">
-                            <option value="">Selecione...</option>
-                            ${escolas.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo</label>
-                        <select class="form-control" name="tipo_id">
-                            <option value="">Selecione...</option>
-                            ${tipos.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Status Inicial</label>
-                        <select class="form-control" name="status_id">
-                            <option value="">Selecione...</option>
-                            ${status.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Responsável</label>
-                        <select class="form-control" name="funcionario_id">
-                            <option value="">Selecione...</option>
-                            ${funcionarios.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Processo SIGED</label>
-                        <input class="form-control" name="processo_siged">
-                    </div>
-                </div>
-            </form>
-        `;
-
-        this.openModal('Nova Demanda', html, [
-            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda() }
-        ]);
-    },
-
-    async salvarDemanda() {
-        const form = document.getElementById('demandaForm');
-        if(!form.checkValidity()) return form.reportValidity();
-        const data = Object.fromEntries(new FormData(form));
-        
-        await this.request('demandas.php?action=create', 'POST', data);
-        this.closeModal();
-        this.carregarDemandas();
-    },
-    
-    // Simplificando edição para o MVP
-    editarDemanda(id) {
-        alert('Edição de demanda #' + id + ' (a implementar expansão visual)');
-    },
-    
-    async novaAcao(demanda_id) {
-        const funcionarios = await this.request('cadastros.php?tabela=funcionarios&action=list');
-        const status = await this.request('cadastros.php?tabela=status_atendimento&action=list');
-        
-        const html = `
-            <form id="acaoForm">
-                <input type="hidden" name="demanda_id" value="${demanda_id}">
-                <div class="form-group">
-                    <label>Descrição da Ação</label>
-                    <textarea class="form-control" name="descricao" rows="2" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Responsável (Funcionário)</label>
-                    <select class="form-control" name="funcionario_id">
-                        <option value="">Selecione...</option>
-                        ${funcionarios.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Mudar Status da Demanda para (Opcional)</label>
-                    <select class="form-control" name="status_id_momento">
-                        <option value="">Manter Status Atual</option>
-                        ${status.map(x => `<option value="${x.id}">${x.nome}</option>`).join('')}
-                    </select>
-                </div>
-            </form>
-        `;
-        
-        this.openModal('Registrar Ação', html, [
-            { label: 'Salvar', class: 'btn-primary', action: async () => {
-                const form = document.getElementById('acaoForm');
-                if(!form.checkValidity()) return form.reportValidity();
-                await this.request('acoes.php?action=create', 'POST', Object.fromEntries(new FormData(form)));
-                this.closeModal();
-                this.verAcoes(demanda_id); // Reload list
-            } }
-        ]);
     }
 };
 

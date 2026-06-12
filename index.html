@@ -20,6 +20,11 @@
     <!-- Ícones -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
+    <!-- Firebase SDK v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
     <!-- Estilo Principal -->
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -32,8 +37,8 @@
             <h2>Acesso Restrito</h2>
             <form id="formLogin" onsubmit="event.preventDefault(); app.doLogin();">
                 <div class="form-group">
-                    <label>Usuário</label>
-                    <input type="text" id="login_user" class="form-control" required>
+                    <label>E-mail</label>
+                    <input type="email" id="login_user" class="form-control" placeholder="admin@admin.com" required>
                 </div>
                 <div class="form-group">
                     <label>Senha</label>
@@ -42,6 +47,11 @@
                 <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Entrar</button>
             </form>
             <div id="login_error" class="login-error"></div>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <button class="btn btn-secondary btn-sm" onclick="app.setupFirebaseBase()" style="width: 100%; justify-content: center;">Criar Banco de Dados e Admin Inicial</button>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;">*Use apenas na primeira vez após configurar o FirebaseConfig no código.</p>
+            </div>
         </div>
     </div>
 
