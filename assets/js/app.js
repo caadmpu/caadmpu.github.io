@@ -45,30 +45,41 @@ const app = {
         // Monitora o status de login via Firebase Auth
         auth.onAuthStateChanged(async (user) => {
             if (user) {
-                // Checagem de Domínio Restrito (Ignora a regra para o admin master)
-                if (DOMINIO_AUTORIZADO && !user.email.endsWith(DOMINIO_AUTORIZADO) && user.email !== 'admin@admin.com') {
-                    await auth.signOut();
-                    document.getElementById('login_error').innerText = "Acesso Negado: Apenas contas " + DOMINIO_AUTORIZADO + " são permitidas.";
-                    this.showLogin();
-                    return;
-                }
-
-                // Busca as permissões extras no Firestore
+                // Busca as permissões pelo UID
                 const doc = await db.collection('usuarios').doc(user.uid).get();
                 if(doc.exists) {
                     this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
+                    this.showApp();
                 } else {
-                    // Primeiro login via Google!
-                    const newUserDoc = { 
+                    // Se não existe pelo UID, procura se o Admin pré-autorizou o e-mail
+                    const snap = await db.collection('usuarios').where('email', '==', user.email).get();
+                    
+                    if (snap.empty && user.email !== 'admin@admin.com') {
+                        // Não está na whitelist!
+                        await auth.signOut();
+                        document.getElementById('login_error').innerText = "Acesso Negado: Sua conta Google não foi autorizada pelo Administrador.";
+                        this.showLogin();
+                        return;
+                    }
+
+                    // Está na whitelist! Migra os dados pré-cadastrados para o UID correto definitivo.
+                    let newUserDoc = {
                         login: user.displayName || user.email.split('@')[0],
                         email: user.email, 
                         role: 'COMUM', 
-                        permissoes: {} 
+                        permissoes: {}
                     };
+
+                    if (!snap.empty) {
+                        const preAuthDoc = snap.docs[0];
+                        newUserDoc = preAuthDoc.data();
+                        await db.collection('usuarios').doc(preAuthDoc.id).delete(); // Remove o registro temporário sem UID
+                    }
+
                     await db.collection('usuarios').doc(user.uid).set(newUserDoc);
                     this.userDoc = { uid: user.uid, ...newUserDoc };
+                    this.showApp();
                 }
-                this.showApp();
             } else {
                 this.userDoc = null;
                 this.showLogin();
@@ -706,13 +717,24 @@ const app = {
             <form id="userForm">
                 ${isEdit ? `<input type="hidden" name="id" value="${u.id}">` : ''}
                 <div class="form-group">
-                    <label>E-mail</label>
+                    <label>E-mail (Conta do Google ou Pessoal)</label>
                     <input type="email" class="form-control" name="email" value="${u ? u.email : ''}" ${isEdit ? 'readonly' : 'required'}>
                 </div>
+                
+                ${!isEdit ? `
                 <div class="form-group">
-                    <label>${isEdit ? 'Nova Senha (o usuário deve redefinir pelo Firebase)' : 'Senha Inicial'}</label>
-                    <input type="password" class="form-control" name="senha" ${!isEdit ? 'required' : 'disabled'}>
+                    <label>Método de Acesso</label>
+                    <select class="form-control" name="metodo_login" onchange="document.getElementById('senhaBox').style.display = this.value === 'google' ? 'none' : 'block'">
+                        <option value="google">Conta Google (Apenas autorizar o email)</option>
+                        <option value="email">E-mail com Senha (Criar senha inicial)</option>
+                    </select>
                 </div>
+                <div class="form-group" id="senhaBox" style="display:none;">
+                    <label>Senha Inicial</label>
+                    <input type="password" class="form-control" name="senha">
+                </div>
+                ` : ''}
+
                 <div class="form-group">
                     <label>Perfil</label>
                     <select class="form-control" name="role" id="roleSelect" onchange="document.getElementById('permissoesBox').style.display = this.value === 'COMUM' ? 'block' : 'none'">
@@ -730,7 +752,7 @@ const app = {
             </form>
         `;
 
-        this.openModal(isEdit ? 'Editar Permissões' : 'Novo Usuário', html, [
+        this.openModal(isEdit ? 'Editar Permissões' : 'Autorizar Novo Usuário', html, [
             { label: 'Salvar', class: 'btn-primary', action: () => this.salvarUsuario(isEdit) }
         ]);
     },
@@ -759,21 +781,34 @@ const app = {
             this.closeModal();
             this.initUsuarios();
         } else {
-            const senha = fd.get('senha');
+            const metodo = fd.get('metodo_login');
             try {
-                // Cria uma app Firebase secundária para não deslogar o ADM
-                const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
-                const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
-                
-                await db.collection('usuarios').doc(res.user.uid).set({
-                    login: email.split('@')[0],
-                    email: email,
-                    role: role,
-                    permissoes: permissoes
-                });
-                
-                secondaryApp.auth().signOut();
-                secondaryApp.delete();
+                if (metodo === 'google') {
+                    // Apenas cadastra na whitelist para o usuário entrar depois
+                    await db.collection('usuarios').add({
+                        login: email.split('@')[0],
+                        email: email,
+                        role: role,
+                        permissoes: permissoes
+                    });
+                } else {
+                    // Cria conta real com senha no Firebase Auth
+                    const senha = fd.get('senha');
+                    if(!senha) return alert("Por favor, digite a senha inicial.");
+                    
+                    const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
+                    const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
+                    
+                    await db.collection('usuarios').doc(res.user.uid).set({
+                        login: email.split('@')[0],
+                        email: email,
+                        role: role,
+                        permissoes: permissoes
+                    });
+                    
+                    secondaryApp.auth().signOut();
+                    secondaryApp.delete();
+                }
 
                 this.closeModal();
                 this.initUsuarios();
