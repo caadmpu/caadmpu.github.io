@@ -133,6 +133,13 @@ body {
 .sidebar-footer {
     padding: 15px;
     border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: center;
+}
+
+.brasao-img {
+    max-width: 80px;
+    object-fit: contain;
 }
 
 /* Main Content */

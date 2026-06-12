@@ -72,7 +72,7 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <i class="ri-book-mark-line"></i>
+                    <img src="assets/img/logo.png" alt="Logo" class="logo-img" style="max-height: 40px;" onerror="this.style.display='none'">
                     <div>
                         <h2>Gestão de Demandas</h2>
                         <span>CRE Manacapuru</span>
@@ -82,16 +82,16 @@
             <nav class="sidebar-nav">
                 <div class="nav-section">PRINCIPAL</div>
                 <ul id="main-menu">
-                    <li class="active" onclick="app.showView('dashboard')"><i class="ri-dashboard-line"></i> Dashboard</li>
+                    <li class="active" data-view="dashboard"><i class="ri-dashboard-line"></i> Dashboard</li>
                     <li onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</li>
-                    <li onclick="app.showView('demandas')"><i class="ri-file-list-3-line"></i> Demandas</li>
-                    <li onclick="app.showView('arquivadas')"><i class="ri-inbox-archive-line"></i> Arquivadas</li>
+                    <li data-view="demandas"><i class="ri-file-list-3-line"></i> Demandas</li>
+                    <li data-view="arquivadas"><i class="ri-inbox-archive-line"></i> Arquivadas</li>
                 </ul>
                 
                 <div class="nav-section">CADASTROS</div>
                 <ul id="config-menu">
-                    <li onclick="app.showView('cadastros')"><i class="ri-settings-4-line"></i> Tabelas Base</li>
-                    <li id="menu-usuarios" style="display:none;" onclick="app.showView('usuarios')"><i class="ri-user-settings-line"></i> Usuários</li>
+                    <li data-view="cadastros"><i class="ri-settings-4-line"></i> Tabelas Base</li>
+                    <li id="menu-usuarios" style="display:none;" data-view="usuarios"><i class="ri-user-settings-line"></i> Usuários</li>
                 </ul>
             </nav>
             <div class="sidebar-footer">
