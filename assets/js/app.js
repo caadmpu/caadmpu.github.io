@@ -11,16 +11,79 @@ const app = {
     charts: {},
     calendar: null,
     kanbanSortables: [],
+    user: null,
 
-    init() {
+    async init() {
         this.bindNav();
         this.startClock();
-        this.loadView(this.currentView);
         
         // Modal events
         document.getElementById('globalModal').addEventListener('click', (e) => {
             if (e.target.id === 'globalModal') this.closeModal();
         });
+
+        await this.checkSession();
+    },
+
+    async checkSession() {
+        const res = await fetch(API_URL + 'auth.php?action=check');
+        if (res.ok) {
+            this.user = await res.json();
+            this.showApp();
+        } else {
+            this.showLogin();
+        }
+    },
+
+    showLogin() {
+        document.getElementById('login-screen').classList.add('active');
+        document.getElementById('app-container').style.display = 'none';
+    },
+
+    showApp() {
+        document.getElementById('login-screen').classList.remove('active');
+        document.getElementById('app-container').style.display = 'block';
+        
+        document.getElementById('user-name-display').innerText = this.user.login;
+        document.getElementById('user-avatar-initial').innerText = this.user.login.charAt(0).toUpperCase();
+        
+        if (this.user.role === 'ADM') {
+            document.getElementById('menu-usuarios').style.display = 'flex';
+        } else {
+            document.getElementById('menu-usuarios').style.display = 'none';
+        }
+        
+        this.loadView(this.currentView);
+    },
+
+    async doLogin() {
+        const login = document.getElementById('login_user').value;
+        const pass = document.getElementById('login_pass').value;
+        const errDiv = document.getElementById('login_error');
+        errDiv.innerText = '';
+        
+        try {
+            const res = await fetch(API_URL + 'auth.php?action=login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: login, senha: pass })
+            });
+            const data = await res.json();
+            
+            if (res.ok && data.success) {
+                this.checkSession();
+            } else {
+                errDiv.innerText = data.error || 'Erro ao logar';
+            }
+        } catch (e) {
+            errDiv.innerText = 'Erro de comunicação';
+        }
+    },
+
+    async doLogout() {
+        await fetch(API_URL + 'auth.php?action=logout');
+        this.user = null;
+        this.showLogin();
     },
 
     startClock() {
@@ -51,11 +114,18 @@ const app = {
         }
         try {
             const res = await fetch(API_URL + endpoint, options);
-            if (!res.ok) throw new Error('API Error');
-            return await res.json();
+            if (res.status === 401) {
+                this.showLogin();
+                throw new Error('Não autenticado');
+            }
+            const resData = await res.json();
+            if (!res.ok) {
+                alert(resData.error || 'Erro na operação');
+                throw new Error(resData.error);
+            }
+            return resData;
         } catch (err) {
             console.error(err);
-            alert('Erro de comunicação com o servidor.');
             return null;
         }
     },
@@ -80,6 +150,7 @@ const app = {
         if (view === 'kanban') this.initKanban();
         if (view === 'calendario') this.initCalendario();
         if (view === 'cadastros') this.initCadastros();
+        if (view === 'usuarios') this.initUsuarios();
     },
 
     // --- DASHBOARD ---
@@ -423,6 +494,114 @@ const app = {
         });
         
         document.getElementById('globalModal').classList.add('active');
+    },
+
+    // --- USUARIOS (ADM) ---
+    async initUsuarios() {
+        const tbody = document.getElementById('usuarios-tbody');
+        tbody.innerHTML = '';
+        const usuarios = await this.request('usuarios.php?action=list');
+        if (!usuarios) return;
+        
+        usuarios.forEach(u => {
+            const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario(${u.id})"><i class="ri-delete-bin-line"></i></button>`;
+            
+            let badges = '';
+            if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
+            else {
+                const p = u.permissoes;
+                if(p.criar_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Criar</span> ';
+                if(p.editar_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Editar</span> ';
+                if(p.excluir_demandas) badges += '<span class="badge" style="background:#e2e8f0;">Excluir</span> ';
+                if(p.gerenciar_cadastros) badges += '<span class="badge" style="background:#e2e8f0;">Cadastros</span> ';
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${u.id}</td>
+                <td>${u.login}</td>
+                <td>${u.role}</td>
+                <td>${badges}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
+                    ${btnExcluir}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    },
+
+    openModalUsuario(u = null) {
+        const isEdit = !!u;
+        const html = `
+            <form id="userForm">
+                ${isEdit ? `<input type="hidden" name="id" value="${u.id}">` : ''}
+                <div class="form-group">
+                    <label>Login</label>
+                    <input type="text" class="form-control" name="login" value="${u ? u.login : ''}" required>
+                </div>
+                <div class="form-group">
+                    <label>${isEdit ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}</label>
+                    <input type="password" class="form-control" name="senha" ${!isEdit ? 'required' : ''}>
+                </div>
+                <div class="form-group">
+                    <label>Perfil</label>
+                    <select class="form-control" name="role" id="roleSelect" onchange="document.getElementById('permissoesBox').style.display = this.value === 'COMUM' ? 'block' : 'none'">
+                        <option value="COMUM" ${u && u.role === 'COMUM' ? 'selected' : ''}>Comum</option>
+                        <option value="ADM" ${u && u.role === 'ADM' ? 'selected' : ''}>Administrador</option>
+                    </select>
+                </div>
+                <div id="permissoesBox" style="display: ${!u || u.role === 'COMUM' ? 'block' : 'none'}; background: var(--background); padding: 15px; border-radius: var(--radius-md);">
+                    <strong>Permissões Específicas (Para perfil comum)</strong><br><br>
+                    <label><input type="checkbox" name="perm_criar" value="1" ${u && u.permissoes.criar_demandas ? 'checked' : ''}> Pode Criar Demandas</label><br>
+                    <label><input type="checkbox" name="perm_editar" value="1" ${u && u.permissoes.editar_demandas ? 'checked' : ''}> Pode Editar Demandas e Ações</label><br>
+                    <label><input type="checkbox" name="perm_excluir" value="1" ${u && u.permissoes.excluir_demandas ? 'checked' : ''}> Pode Excluir e Arquivar Demandas</label><br>
+                    <label><input type="checkbox" name="perm_cadastros" value="1" ${u && u.permissoes.gerenciar_cadastros ? 'checked' : ''}> Pode Gerenciar Cadastros Base</label>
+                </div>
+            </form>
+        `;
+
+        this.openModal(isEdit ? 'Editar Usuário' : 'Novo Usuário', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarUsuario(isEdit) }
+        ]);
+    },
+
+    editarUsuario(u) {
+        this.openModalUsuario(u);
+    },
+
+    async salvarUsuario(isEdit) {
+        const form = document.getElementById('userForm');
+        if(!form.checkValidity()) return form.reportValidity();
+        
+        const fd = new FormData(form);
+        const data = {
+            login: fd.get('login'),
+            senha: fd.get('senha'),
+            role: fd.get('role'),
+            permissoes: {
+                criar_demandas: !!fd.get('perm_criar'),
+                editar_demandas: !!fd.get('perm_editar'),
+                excluir_demandas: !!fd.get('perm_excluir'),
+                gerenciar_cadastros: !!fd.get('perm_cadastros')
+            }
+        };
+        if(isEdit) data.id = fd.get('id');
+
+        const endpoint = isEdit ? 'usuarios.php?action=update' : 'usuarios.php?action=create';
+        const res = await this.request(endpoint, 'POST', data);
+        
+        if (res && res.success) {
+            this.closeModal();
+            this.initUsuarios();
+        }
+    },
+
+    async deletarUsuario(id) {
+        if(confirm('Tem certeza que deseja excluir este usuário?')) {
+            const res = await this.request('usuarios.php?action=delete', 'POST', {id});
+            if (res && res.success) this.initUsuarios();
+        }
     },
 
     closeModal() {

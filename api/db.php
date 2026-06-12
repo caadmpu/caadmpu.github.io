@@ -1,4 +1,8 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 date_default_timezone_set('America/Manaus'); // Ajustar relógio para fuso horário de Manaus-AM
 
 $db_file = __DIR__ . '/demandas.sqlite';
@@ -7,6 +11,22 @@ $needs_init = !file_exists($db_file);
 try {
     $db = new PDO('sqlite:' . $db_file);
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // Verificar se tabela usuarios existe (migração)
+    $stmt = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'");
+    if (!$stmt->fetch()) {
+        $db->exec("
+            CREATE TABLE usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login TEXT UNIQUE NOT NULL,
+                senha_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'COMUM',
+                permissoes TEXT
+            )
+        ");
+        $senha_padrao = password_hash('admin', PASSWORD_DEFAULT);
+        $db->exec("INSERT INTO usuarios (login, senha_hash, role, permissoes) VALUES ('admin', '$senha_padrao', 'ADM', '{\"all\":true}')");
+    }
 
     if ($needs_init) {
         $db->exec("
@@ -123,5 +143,22 @@ function jsonResponse($data, $status = 200) {
     http_response_code($status);
     echo json_encode($data);
     exit;
+}
+
+// Controle de Acesso
+function requireAuth($permissao_necessaria = null) {
+    if (!isset($_SESSION['user_id'])) {
+        jsonResponse(['error' => 'Não autenticado'], 401);
+    }
+    
+    if ($_SESSION['user_role'] === 'ADM') return true; // ADM pode tudo
+    
+    if ($permissao_necessaria) {
+        $permissoes = $_SESSION['user_permissoes'] ?? [];
+        if (empty($permissoes[$permissao_necessaria])) {
+            jsonResponse(['error' => 'Acesso Negado. Você não tem permissão para isso.'], 403);
+        }
+    }
+    return true;
 }
 ?>

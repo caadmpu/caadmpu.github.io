@@ -25,44 +25,69 @@
 </head>
 <body>
 
-    <!-- Sidebar Lateral -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <img src="assets/img/logo.png" alt="Logo" class="logo-img" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
-        </div>
-        <nav class="sidebar-nav">
-            <ul>
-                <li class="active" data-view="dashboard"><i class="ri-dashboard-line"></i> Dashboard</li>
-                <li data-view="demandas"><i class="ri-list-check"></i> Demandas</li>
-                <li data-view="kanban"><i class="ri-layout-column-line"></i> Kanban</li>
-                <li data-view="calendario"><i class="ri-calendar-line"></i> Calendário</li>
-                <li data-view="cadastros"><i class="ri-settings-3-line"></i> Cadastros</li>
-            </ul>
-        </nav>
-        <div class="sidebar-footer">
-            <img src="assets/img/brasao.png" alt="Brasão" class="brasao-img" onerror="this.src='https://via.placeholder.com/80x80?text=BRASÃO'">
-        </div>
-    </aside>
-
-    <!-- Conteúdo Principal -->
-    <main class="main-content">
-        <header class="topbar">
-            <div class="topbar-left">
-                <h1 id="page-title">Dashboard</h1>
-            </div>
-            <div class="topbar-right">
-                <div class="clock" id="clockDisplay">--:--</div>
-                <div class="user-profile">
-                    <div class="avatar">A</div>
-                    <span>Admin</span>
+    <!-- Tela de Login -->
+    <div id="login-screen" class="login-screen active">
+        <div class="login-box">
+            <img src="assets/img/logo.png" alt="Logo" class="login-logo" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
+            <h2>Acesso Restrito</h2>
+            <form id="formLogin" onsubmit="event.preventDefault(); app.doLogin();">
+                <div class="form-group">
+                    <label>Usuário</label>
+                    <input type="text" id="login_user" class="form-control" required>
                 </div>
-            </div>
-        </header>
-
-        <div class="content-area" id="contentArea">
-            <!-- As views serão injetadas aqui via JS -->
+                <div class="form-group">
+                    <label>Senha</label>
+                    <input type="password" id="login_pass" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Entrar</button>
+            </form>
+            <div id="login_error" class="login-error"></div>
         </div>
-    </main>
+    </div>
+
+    <!-- App Container -->
+    <div id="app-container" style="display: none; width: 100%; height: 100%;">
+        <!-- Sidebar Lateral -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="assets/img/logo.png" alt="Logo" class="logo-img" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
+            </div>
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="active" data-view="dashboard"><i class="ri-dashboard-line"></i> Dashboard</li>
+                    <li data-view="demandas"><i class="ri-list-check"></i> Demandas</li>
+                    <li data-view="kanban"><i class="ri-layout-column-line"></i> Kanban</li>
+                    <li data-view="calendario"><i class="ri-calendar-line"></i> Calendário</li>
+                    <li data-view="cadastros"><i class="ri-settings-3-line"></i> Cadastros</li>
+                    <li id="menu-usuarios" data-view="usuarios" style="display:none;"><i class="ri-user-settings-line"></i> Usuários</li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <img src="assets/img/brasao.png" alt="Brasão" class="brasao-img" onerror="this.src='https://via.placeholder.com/80x80?text=BRASÃO'">
+            </div>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <main class="main-content">
+            <header class="topbar">
+                <div class="topbar-left">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="topbar-right">
+                    <div class="clock" id="clockDisplay">--:--</div>
+                    <div class="user-profile">
+                        <div class="avatar" id="user-avatar-initial">A</div>
+                        <span id="user-name-display">Admin</span>
+                        <button class="btn btn-sm btn-secondary" onclick="app.doLogout()" style="margin-left: 10px;"><i class="ri-logout-box-r-line"></i> Sair</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-area" id="contentArea">
+                <!-- As views serão injetadas aqui via JS -->
+            </div>
+        </main>
+    </div>
 
     <!-- Templates de Views (Escondidos) -->
     
@@ -182,6 +207,27 @@
                     </table>
                 </div>
             </div>
+        </div>
+    </template>
+
+    <!-- View: Usuários (ADM) -->
+    <template id="view-usuarios">
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="app.openModalUsuario()"><i class="ri-user-add-line"></i> Novo Usuário</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Login</th>
+                        <th>Perfil</th>
+                        <th>Permissões Extras</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="usuarios-tbody"></tbody>
+            </table>
         </div>
     </template>
 

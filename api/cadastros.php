@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+requireAuth(); // Logged in
 
 $action = $_GET['action'] ?? '';
 $tabela = $_GET['tabela'] ?? '';
@@ -28,6 +29,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     
     if ($action === 'create') {
+        requireAuth('gerenciar_cadastros');
         // Obter as chaves do array $data para criar a query dinamicamente
         $columns = implode(", ", array_keys($data));
         $placeholders = implode(", ", array_fill(0, count($data), "?"));
@@ -40,6 +42,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true, 'id' => $db->lastInsertId()]);
     }
     elseif ($action === 'update') {
+        requireAuth('gerenciar_cadastros');
         $id = $data['id'];
         unset($data['id']);
         
@@ -59,6 +62,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true]);
     }
     elseif ($action === 'delete') {
+        requireAuth('gerenciar_cadastros');
         $sql = "DELETE FROM $tabela WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$data['id']]);

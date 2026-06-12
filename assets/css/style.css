@@ -484,3 +484,44 @@ body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-md);
 }
+
+/* Tela de Login */
+.login-screen {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--background);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.login-screen.active {
+    display: flex;
+}
+.login-box {
+    background: var(--surface);
+    padding: 40px;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+.login-logo {
+    max-width: 180px;
+    margin-bottom: 20px;
+}
+.login-box h2 {
+    margin-bottom: 30px;
+    color: var(--text-main);
+}
+.login-box .form-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+.login-error {
+    color: var(--danger-color);
+    margin-top: 15px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}

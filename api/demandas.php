@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+requireAuth(); // Exige login para tudo
 
 $action = $_GET['action'] ?? '';
 
@@ -69,6 +70,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     
     if ($action === 'create') {
+        requireAuth('criar_demandas');
         $stmt = $db->query("SELECT value FROM config WHERE key = 'next_demanda_numero'");
         $numero = (int)$stmt->fetch()['value'];
         
@@ -92,6 +94,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true, 'id' => $db->lastInsertId()]);
     }
     elseif ($action === 'update') {
+        requireAuth('editar_demandas');
         $sql = "UPDATE demandas SET 
                 descricao = ?, demandante_id = ?, escola_id = ?, funcionario_id = ?, 
                 tipo_id = ?, status_id = ?, processo_siged = ?
@@ -110,18 +113,21 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true]);
     }
     elseif ($action === 'update_status') { // Para o Kanban
+        requireAuth('editar_demandas');
         $sql = "UPDATE demandas SET status_id = ? WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$data['status_id'], $data['id']]);
         jsonResponse(['success' => true]);
     }
     elseif ($action === 'archive') {
+        requireAuth('excluir_demandas');
         $sql = "UPDATE demandas SET arquivada = 1 WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$data['id']]);
         jsonResponse(['success' => true]);
     }
     elseif ($action === 'unarchive') {
+        requireAuth('excluir_demandas');
         $sql = "UPDATE demandas SET arquivada = 0 WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$data['id']]);

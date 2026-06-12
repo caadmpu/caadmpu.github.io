@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+requireAuth(); // Logged in
 
 $action = $_GET['action'] ?? '';
 
@@ -22,6 +23,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     
     if ($action === 'create') {
+        requireAuth('editar_demandas');
         $sql = "INSERT INTO acoes (demanda_id, descricao, funcionario_id, status_id_momento)
                 VALUES (?, ?, ?, ?)";
         $stmt = $db->prepare($sql);
@@ -41,6 +43,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true, 'id' => $db->lastInsertId()]);
     }
     elseif ($action === 'update') {
+        requireAuth('editar_demandas');
         $sql = "UPDATE acoes SET descricao = ?, funcionario_id = ?, status_id_momento = ? WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([
@@ -52,6 +55,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true]);
     }
     elseif ($action === 'delete') {
+        requireAuth('excluir_demandas');
         $sql = "DELETE FROM acoes WHERE id = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$data['id']]);
