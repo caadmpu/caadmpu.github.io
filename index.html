@@ -138,7 +138,9 @@
                         <option value="pie">Pizza</option>
                     </select>
                 </div>
-                <canvas id="chartStatus"></canvas>
+                <div class="chart-body">
+                    <canvas id="chartStatus"></canvas>
+                </div>
             </div>
             <div class="chart-container">
                 <div class="chart-header">
@@ -148,7 +150,9 @@
                         <option value="bar">Barra</option>
                     </select>
                 </div>
-                <canvas id="chartTipo"></canvas>
+                <div class="chart-body">
+                    <canvas id="chartTipo"></canvas>
+                </div>
             </div>
         </div>
     </template>
@@ -159,8 +163,10 @@
             <button class="btn btn-primary" onclick="app.openModalDemanda()"><i class="ri-add-line"></i> Nova Demanda</button>
             <button class="btn btn-secondary" onclick="app.openModalImportar()"><i class="ri-file-excel-line"></i> Importar Colar (Excel)</button>
             <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
+            <button class="btn btn-danger" onclick="app.resetarContadorDemandas()" title="Zerar a numeração para iniciar do 0001" style="margin-left:auto;"><i class="ri-refresh-line"></i> Resetar N°</button>
             <div class="filters">
                 <input type="text" id="filter-search" placeholder="Buscar...">
+                <select id="filter-coordenadoria"><option value="">Todas Coordenações</option></select>
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>
                 <select id="filter-tipo"><option value="">Todos Tipos</option></select>
                 <select id="filter-status"><option value="">Todos Status</option></select>
@@ -176,6 +182,7 @@
                         <th>Nº</th>
                         <th>Data</th>
                         <th>Demandante</th>
+                        <th>Coordenação</th>
                         <th>Escola</th>
                         <th>Tipo</th>
                         <th>Status</th>
@@ -208,6 +215,7 @@
             <div class="cadastros-menu">
                 <ul id="cadastros-tabs">
                     <li class="active" data-table="escolas">Escolas</li>
+                    <li data-table="coordenadorias">Coordenações</li>
                     <li data-table="funcionarios">Funcionários</li>
                     <li data-table="demandantes">Demandantes</li>
                     <li data-table="setores">Setores</li>

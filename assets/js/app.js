@@ -256,6 +256,7 @@ const app = {
         this.carregarDemandas();
         
         document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-status').addEventListener('change', () => this.filtrarTabelaDemandas());
@@ -266,24 +267,25 @@ const app = {
         const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
         const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
         const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
+        const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
         
         const selEscola = document.getElementById('filter-escola');
         const selTipo = document.getElementById('filter-tipo');
         const selStatus = document.getElementById('filter-status');
+        const selCoord = document.getElementById('filter-coordenadoria');
         
         escolas.forEach(e => selEscola.innerHTML += `<option value="${e.nome}">${e.nome}</option>`);
         tipos.forEach(t => selTipo.innerHTML += `<option value="${t.nome}">${t.nome}</option>`);
         status.forEach(s => selStatus.innerHTML += `<option value="${s.nome}">${s.nome}</option>`);
+        coord.forEach(c => selCoord.innerHTML += `<option value="${c.nome}">${c.nome}</option>`);
     },
 
     async carregarDemandas() {
         const showArchived = document.getElementById('filter-arquivadas').checked;
         try {
-            // O Firebase exige índice composto para where + orderBy. Para evitar isso, ordenamos via JS.
             const snap = await db.collection('demandas').where('arquivada', '==', showArchived).get();
             let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
-            // Ordenação decrescente pela data
             demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
             
             window.todasDemandas = demandas;
@@ -293,6 +295,13 @@ const app = {
         }
     },
 
+    formatarDataBR(dataISO) {
+        if(!dataISO) return '-';
+        const p = dataISO.split('-');
+        if(p.length !== 3) return dataISO;
+        return `${p[2]}/${p[1]}/${p[0]}`;
+    },
+
     renderTabelaDemandas(demandas) {
         const tbody = document.getElementById('demandas-tbody');
         tbody.innerHTML = '';
@@ -300,11 +309,12 @@ const app = {
             const tr = document.createElement('tr');
             const cssStatus = d.status_nome ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
             tr.innerHTML = `
-                <td>#${d.numero_registro || d.id.substring(0,5)}</td>
-                <td>${d.data_registro || '-'}</td>
+                <td>${d.numero_registro || '-'}</td>
+                <td>${this.formatarDataBR(d.data_registro)}</td>
                 <td>${d.demandante_nome || '-'}</td>
+                <td><span class="badge" style="background:#475569">${d.coordenadoria_nome || '-'}</span></td>
                 <td>${d.escola_nome || '-'}</td>
-                <td>${d.tipo_nome || '-'}</td>
+                <td><span class="badge" style="background:${this.getBadgeColor(d.tipo_nome)}">${d.tipo_nome}</span></td>
                 <td><span class="badge badge-${cssStatus}">${d.status_nome || '-'}</span></td>
                 <td>${d.funcionario_nome || '-'}</td>
                 <td>
@@ -325,13 +335,15 @@ const app = {
         const escola = document.getElementById('filter-escola').value;
         const tipo = document.getElementById('filter-tipo').value;
         const status = document.getElementById('filter-status').value;
+        const coord = document.getElementById('filter-coordenadoria').value;
         
         const filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
             const matchEscola = escola ? d.escola_nome === escola : true;
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;
-            return matchTerm && matchEscola && matchTipo && matchStatus;
+            const matchCoord = coord ? d.coordenadoria_nome === coord : true;
+            return matchTerm && matchEscola && matchTipo && matchStatus && matchCoord;
         });
         this.renderTabelaDemandas(filtradas);
     },
@@ -389,16 +401,16 @@ const app = {
             <table class="data-table">
                 <thead><tr><th>Data</th><th>Descrição</th><th>Funcionário</th><th>Status Momento</th></tr></thead>
                 <tbody>
-        `;
-        acoes.forEach(a => {
-            html += `<tr>
-                <td>${a.data_acao}</td>
-                <td>${a.descricao}</td>
-                <td>${a.funcionario_nome || ''}</td>
-                <td>${a.status_nome || ''}</td>
-            </tr>`;
-        });
-        html += `</tbody></table>`;
+                    ${acoes.map(a => `
+                        <tr>
+                            <td>${this.formatarDataBR(a.data_acao)}</td>
+                            <td>${a.descricao}</td>
+                            <td>${a.funcionario_nome}</td>
+                            <td>${a.status_nome ? `<span class="badge" style="background:var(--primary)">${a.status_nome}</span>` : '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
         this.openModal('Histórico de Ações', html, []);
     },
 
@@ -467,6 +479,7 @@ const app = {
         const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
         const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
         const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
+        const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
 
         const html = `
             <form id="demandaForm">
@@ -478,9 +491,16 @@ const app = {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
                     <div class="form-group">
                         <label>Demandante</label>
-                        <select class="form-control" name="demandante_nome">
+                        <select class="form-control" name="demandante_nome" required>
                             <option value="">Selecione...</option>
                             ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Coordenação</label>
+                        <select class="form-control" name="coordenadoria_nome" required>
+                            <option value="">Selecione...</option>
+                            ${coord.map(x => `<option value="${x.nome}" ${d && d.coordenadoria_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
@@ -536,12 +556,47 @@ const app = {
         } else {
             data.arquivada = false;
             data.data_registro = new Date().toISOString().split('T')[0];
-            data.numero_registro = Math.floor(Math.random() * 90000) + 10000; // Mock ID
+            data.numero_registro = await this.gerarNumeroDemanda();
             await db.collection('demandas').add(data);
         }
 
         this.closeModal();
         this.carregarDemandas();
+    },
+
+    async gerarNumeroDemanda() {
+        const anoAtual = new Date().getFullYear();
+        const ref = db.collection('configuracoes').doc('contador_demandas');
+        
+        let novoNumeroStr = '';
+        
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(ref);
+            let seq = 1;
+            
+            if (doc.exists) {
+                const data = doc.data();
+                if (data.ano === anoAtual) {
+                    seq = (data.sequencia || 0) + 1;
+                }
+            }
+            
+            transaction.set(ref, { ano: anoAtual, sequencia: seq }, { merge: true });
+            
+            const seqFormatada = String(seq).padStart(4, '0');
+            novoNumeroStr = `${seqFormatada}/${anoAtual}`;
+        });
+        
+        return novoNumeroStr;
+    },
+
+    async resetarContadorDemandas() {
+        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
+        if(confirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\\n\\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
+            const anoAtual = new Date().getFullYear();
+            await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: 0 });
+            alert("Contador resetado com sucesso! A próxima demanda será a 0001.");
+        }
     },
 
     openModalImportar() {
@@ -594,10 +649,13 @@ const app = {
             const arquivadaStr = cols[9]?.trim().toLowerCase() || 'não';
             const arquivada = (arquivadaStr === 'sim' || arquivadaStr === 'true');
 
+            // Gera numeração sequencial
+            const numSequencial = await this.gerarNumeroDemanda();
+
             // Salva a demanda
             await db.collection('demandas').add({
                 data_registro: dataFormated,
-                numero_registro: Math.floor(Math.random() * 90000) + 10000,
+                numero_registro: numSequencial,
                 tipo_nome: tipo,
                 status_nome: status,
                 demandante_nome: demandante,
@@ -759,6 +817,7 @@ const app = {
         
         const fields = {
             'escolas': ['nome', 'sigeam', 'inep'],
+            'coordenadorias': ['nome'],
             'funcionarios': ['nome', 'cargo', 'funcao', 'matricula', 'portaria'],
             'demandantes': ['nome', 'cargo', 'funcao', 'rg', 'cpf', 'matricula', 'endereco', 'contato'],
             'setores': ['nome'],
