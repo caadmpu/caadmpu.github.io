@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
     <!-- Estilo Principal -->
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -204,12 +204,12 @@
             <button class="btn btn-danger" onclick="app.resetarContadorDemandas()" title="Zerar a numeração para iniciar do 0001"><i class="ri-refresh-line"></i> Resetar Novo</button>
             <div class="filters">
                 <input type="text" id="filter-search" placeholder="Buscar...">
-                <input type="text" id="filter-processo" placeholder="Processo SIGED...">
                 <select id="filter-coordenadoria"><option value="">Todas Coordenações</option></select>
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>
                 <select id="filter-tipo"><option value="">Todos Tipos</option></select>
                 <select id="filter-status"><option value="">Todos Status</option></select>
                 <label><input type="checkbox" id="filter-arquivadas"> Mostrar Arquivadas</label>
+                <label><input type="checkbox" id="filter-com-processo"> Com Processo SIGED</label>
             </div>
             <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
         </div>
@@ -421,6 +421,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="assets/js/app.js?v=9"></script>
+    <script src="assets/js/app.js?v=11"></script>
 </body>
 </html>
