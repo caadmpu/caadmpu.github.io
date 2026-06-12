@@ -278,9 +278,19 @@ const app = {
 
     async carregarDemandas() {
         const showArchived = document.getElementById('filter-arquivadas').checked;
-        const snap = await db.collection('demandas').where('arquivada', '==', showArchived).orderBy('data_registro', 'desc').get();
-        window.todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        this.renderTabelaDemandas(window.todasDemandas);
+        try {
+            // O Firebase exige índice composto para where + orderBy. Para evitar isso, ordenamos via JS.
+            const snap = await db.collection('demandas').where('arquivada', '==', showArchived).get();
+            let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            // Ordenação decrescente pela data
+            demandas.sort((a, b) => new Date(b.data_registro || 0) - new Date(a.data_registro || 0));
+            
+            window.todasDemandas = demandas;
+            this.renderTabelaDemandas(window.todasDemandas);
+        } catch(e) {
+            console.error("Erro ao carregar demandas:", e);
+        }
     },
 
     renderTabelaDemandas(demandas) {
@@ -366,8 +376,12 @@ const app = {
 
     // Ações da Demanda
     async verAcoes(id) {
-        const snap = await db.collection('acoes').where('demanda_id', '==', id).orderBy('data_acao', 'asc').get();
-        const acoes = snap.docs.map(d => d.data());
+        const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
+        let acoes = snap.docs.map(d => d.data());
+        
+        // Ordenação client-side para evitar index errors
+        acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
+        
         let html = `
             <div style="margin-bottom: 15px;">
                 <button class="btn btn-sm btn-primary" onclick="app.novaAcao('${id}')"><i class="ri-add-line"></i> Nova Ação</button>
@@ -445,8 +459,8 @@ const app = {
     },
 
     // Nova Demanda
-    async openModalDemanda() {
-        if(!this.temPermissao('criar_demandas')) return alert("Sem permissão");
+    async openModalDemanda(d = null) {
+        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) return alert("Sem permissão");
 
         const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
         const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
@@ -456,68 +470,76 @@ const app = {
 
         const html = `
             <form id="demandaForm">
+                ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
                 <div class="form-group">
                     <label>Descrição</label>
-                    <textarea class="form-control" name="descricao" rows="3" required></textarea>
+                    <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
                     <div class="form-group">
                         <label>Demandante</label>
                         <select class="form-control" name="demandante_nome">
                             <option value="">Selecione...</option>
-                            ${dem.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                            ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Escola</label>
                         <select class="form-control" name="escola_nome">
                             <option value="">Selecione...</option>
-                            ${escolas.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                            ${escolas.map(x => `<option value="${x.nome}" ${d && d.escola_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Tipo</label>
                         <select class="form-control" name="tipo_nome">
                             <option value="">Selecione...</option>
-                            ${tipos.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                            ${tipos.map(x => `<option value="${x.nome}" ${d && d.tipo_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Status Inicial</label>
                         <select class="form-control" name="status_nome">
                             <option value="">Selecione...</option>
-                            ${status.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                            ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Responsável</label>
                         <select class="form-control" name="funcionario_nome">
                             <option value="">Selecione...</option>
-                            ${func.map(x => `<option value="${x.nome}">${x.nome}</option>`).join('')}
+                            ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Processo SIGED</label>
-                        <input class="form-control" name="processo_siged">
+                        <input class="form-control" name="processo_siged" value="${d ? (d.processo_siged||'') : ''}">
                     </div>
                 </div>
             </form>
         `;
 
-        this.openModal('Nova Demanda', html, [
-            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda() }
+        this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
         ]);
     },
 
-    async salvarDemanda() {
+    async salvarDemanda(isEdit) {
         const form = document.getElementById('demandaForm');
         if(!form.checkValidity()) return form.reportValidity();
         const data = Object.fromEntries(new FormData(form));
-        data.arquivada = false;
-        data.data_registro = new Date().toISOString().split('T')[0];
-        data.numero_registro = Math.floor(Math.random() * 90000) + 10000; // Mock ID
+        
+        if (isEdit) {
+            const id = data.id;
+            delete data.id;
+            await db.collection('demandas').doc(id).update(data);
+        } else {
+            data.arquivada = false;
+            data.data_registro = new Date().toISOString().split('T')[0];
+            data.numero_registro = Math.floor(Math.random() * 90000) + 10000; // Mock ID
+            await db.collection('demandas').add(data);
+        }
 
-        await db.collection('demandas').add(data);
         this.closeModal();
         this.carregarDemandas();
     },
@@ -608,9 +630,13 @@ const app = {
         }
     },
 
-    editarDemanda(id) {
+    async editarDemanda(id) {
         if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
-        alert('Edição: Na versão completa isso abrirá os detalhes.');
+        const doc = await db.collection('demandas').doc(id).get();
+        if(!doc.exists) return alert("Demanda não encontrada.");
+        const d = doc.data();
+        d.id = doc.id;
+        this.openModalDemanda(d);
     },
 
     // --- KANBAN ---
@@ -715,15 +741,21 @@ const app = {
         data.forEach(row => {
             let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
             tbody.innerHTML += `<tr>${tds}<td>
+                <button class="btn btn-sm btn-secondary" onclick='app.editarCadastro(${JSON.stringify(row)})'><i class="ri-edit-line"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
             </td></tr>`;
         });
     },
 
-    openModalCadastro() {
+    editarCadastro(row) {
+        this.openModalCadastro(row);
+    },
+
+    openModalCadastro(row = null) {
         if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
         const tabela = window.currentCadastroTable;
         let html = `<form id="cadastroForm">`;
+        if (row) html += `<input type="hidden" name="id" value="${row.id}">`;
         
         const fields = {
             'escolas': ['nome', 'sigeam', 'inep'],
@@ -735,21 +767,28 @@ const app = {
         };
 
         (fields[tabela] || ['nome']).forEach(f => {
-            html += `<div class="form-group"><label>${f.toUpperCase()}</label><input class="form-control" name="${f}" required></div>`;
+            html += `<div class="form-group"><label>${f.toUpperCase()}</label><input class="form-control" name="${f}" value="${row ? (row[f]||'') : ''}" required></div>`;
         });
         html += `</form>`;
 
-        this.openModal('Novo Cadastro: ' + tabela, html, [
-            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarCadastro() }
+        this.openModal(row ? 'Editar Cadastro: ' + tabela : 'Novo Cadastro: ' + tabela, html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarCadastro(!!row) }
         ]);
     },
 
-    async salvarCadastro() {
+    async salvarCadastro(isEdit) {
         const form = document.getElementById('cadastroForm');
         if(!form.checkValidity()) return form.reportValidity();
         const data = Object.fromEntries(new FormData(form).entries());
         
-        await db.collection(window.currentCadastroTable).add(data);
+        if (isEdit) {
+            const id = data.id;
+            delete data.id;
+            await db.collection(window.currentCadastroTable).doc(id).update(data);
+        } else {
+            await db.collection(window.currentCadastroTable).add(data);
+        }
+
         this.closeModal();
         this.loadCadastroTable(window.currentCadastroTable);
     },
