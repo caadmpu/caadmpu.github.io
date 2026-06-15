@@ -373,10 +373,10 @@ body {
 
 .column-selector-menu {
     position: absolute;
-    top: 0;
-    left: 100%;
-    margin-left: 10px;
-    right: auto;
+    top: calc(100% + 6px);
+    right: 0;
+    left: auto;
+    margin-left: 0;
     z-index: 99999;
     background: var(--surface);
     border: 1px solid var(--border);

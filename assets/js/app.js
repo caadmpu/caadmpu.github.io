@@ -1102,9 +1102,21 @@ const app = {
                             ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Processo SIGED</label>
-                        <input class="form-control" name="processo_siged" value="${d ? (d.processo_siged||'') : ''}">
+                    <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
+                            <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
+                                ${d && d.processo_siged && d.processo_siged !== '-' ? 'checked' : ''}
+                                onchange="document.getElementById('siged-box').style.display = this.checked ? 'block' : 'none'"
+                                style="width:18px; height:18px; cursor:pointer;">
+                            Esta demanda possui número de processo SIGED
+                        </label>
+                    </div>
+                    <div class="form-group" id="siged-box" style="grid-column: 1 / -1; display: ${d && d.processo_siged && d.processo_siged !== '-' ? 'block' : 'none'}; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 15px;">
+                        <label style="font-weight:600; color:#1d4ed8;"><i class="ri-file-text-line"></i> Número do Processo SIGED</label>
+                        <input class="form-control" name="processo_siged" id="campo-siged"
+                            value="${d ? (d.processo_siged||'') : ''}"
+                            placeholder="Ex: 01600.016741/2024-30"
+                            style="margin-top:8px;">
                     </div>
                 </div>
             </form>
