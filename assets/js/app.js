@@ -1067,12 +1067,23 @@ const app = {
                     <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-                    <div class="form-group">
-                        <label>Demandante</label>
-                        <select class="form-control" name="demandante_nome" required>
+                    <div class="form-group" id="demandante-group">
+                        <label style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Demandante</span>
+                            <button type="button" id="btn-toggle-demandante"
+                                onclick="app.toggleDemandanteManual()"
+                                style="font-size:0.75rem; background:none; border:1px solid var(--primary-color); color:var(--primary-color); border-radius:20px; padding:2px 10px; cursor:pointer; white-space:nowrap;">
+                                <i class="ri-edit-line"></i> Digitar manualmente
+                            </button>
+                        </label>
+                        <select class="form-control" name="demandante_nome" id="demandante-select" required>
                             <option value="">Selecione...</option>
                             ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
+                        <input type="text" class="form-control" name="demandante_nome_manual" id="demandante-input"
+                            placeholder="Digite o nome do demandante..."
+                            value="${d && !dem.find(x => x.nome === d.demandante_nome) ? (d.demandante_nome || '') : ''}"
+                            style="display:none; margin-top:0;">
                     </div>
                     <div class="form-group">
                         <label>Coordenação</label>
@@ -1139,12 +1150,69 @@ const app = {
         this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
             { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
         ]);
+
+        // Se estiver editando e o demandante não existir no banco (foi digitado manualmente),
+        // ativa automaticamente o modo manual
+        if (d && d.demandante_nome && !dem.find(x => x.nome === d.demandante_nome)) {
+            setTimeout(() => this.toggleDemandanteManual(true), 50);
+        }
+    },
+
+    toggleDemandanteManual(forcarManual = false) {
+        const sel = document.getElementById('demandante-select');
+        const inp = document.getElementById('demandante-input');
+        const btn = document.getElementById('btn-toggle-demandante');
+        if (!sel || !inp || !btn) return;
+
+        const modoManualAtivo = sel.style.display === 'none';
+
+        if (forcarManual || !modoManualAtivo) {
+            // Ativar modo manual
+            sel.style.display = 'none';
+            sel.removeAttribute('required');
+            sel.value = '';
+            inp.style.display = 'block';
+            inp.setAttribute('required', 'required');
+            btn.innerHTML = '<i class="ri-list-unordered"></i> Selecionar do banco';
+            btn.style.borderColor = 'var(--warning-color, #f59e0b)';
+            btn.style.color = 'var(--warning-color, #f59e0b)';
+            inp.focus();
+        } else {
+            // Voltar para o select
+            inp.style.display = 'none';
+            inp.removeAttribute('required');
+            inp.value = '';
+            sel.style.display = 'block';
+            sel.setAttribute('required', 'required');
+            btn.innerHTML = '<i class="ri-edit-line"></i> Digitar manualmente';
+            btn.style.borderColor = 'var(--primary-color)';
+            btn.style.color = 'var(--primary-color)';
+        }
     },
 
     async salvarDemanda(isEdit) {
         const form = document.getElementById('demandaForm');
+
+        // Se modo manual estiver ativo, transfere o valor do input para o campo que será salvo
+        const sel = document.getElementById('demandante-select');
+        const inp = document.getElementById('demandante-input');
+        if (sel && inp && sel.style.display === 'none') {
+            // Cria um campo oculto temporário com o nome correto para o FormData capturar
+            let hiddenField = form.querySelector('input[name="demandante_nome"]');
+            if (!hiddenField) {
+                hiddenField = document.createElement('input');
+                hiddenField.type = 'hidden';
+                hiddenField.name = 'demandante_nome';
+                form.appendChild(hiddenField);
+            }
+            hiddenField.value = inp.value.trim();
+        }
+
         if(!form.checkValidity()) return form.reportValidity();
         const data = Object.fromEntries(new FormData(form));
+
+        // Remove o campo auxiliar manual (não deve ser salvo no banco)
+        delete data.demandante_nome_manual;
         
         if (isEdit) {
             const id = data.id;
