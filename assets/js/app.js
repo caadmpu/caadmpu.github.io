@@ -41,7 +41,8 @@ const app = {
         { key: 'demandante', label: 'Demandante', show: true },
         { key: 'escola', label: 'Escola', show: true },
         { key: 'responsavel', label: 'Responsável', show: true },
-        { key: 'coordenacao', label: 'Coordenação', show: true }
+        { key: 'coordenacao', label: 'Coordenação', show: true },
+        { key: 'processo', label: 'Processo', show: true }
     ],
     pagination: {
         currentPage: 1,
@@ -546,6 +547,7 @@ const app = {
                         case 'tipo': tdHtml += `<td>${d.tipo_nome || '-'}</td>`; break;
                         case 'status': tdHtml += `<td>${d.status_nome ? `<span class="badge badge-${cssStatus}">${d.status_nome}</span>` : '-'}</td>`; break;
                         case 'responsavel': tdHtml += `<td>${d.funcionario_nome || '-'}</td>`; break;
+                        case 'processo': tdHtml += `<td>${d.processo_siged || '-'}</td>`; break;
                     }
                 });
 
