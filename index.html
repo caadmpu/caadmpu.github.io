@@ -94,6 +94,9 @@
                 <ul id="config-menu">
                     <li data-view="cadastros"><i class="ri-settings-4-line"></i> Tabelas Base</li>
                     <li id="menu-usuarios" style="display:none;" data-view="usuarios"><i class="ri-user-settings-line"></i> Usuários</li>
+                    <li data-view="contatos"><i class="ri-contacts-book-line"></i> Agenda de Contatos</li>
+                    <li data-view="sugestoes"><i class="ri-lightbulb-line"></i> Sugestões</li>
+                    <li data-view="creditos"><i class="ri-info-card-line"></i> Créditos</li>
                 </ul>
             </nav>
             <div class="sidebar-footer">
@@ -112,6 +115,7 @@
                     <div class="user-profile">
                         <div class="avatar" id="user-avatar-initial">A</div>
                         <span id="user-name-display">Admin</span>
+                        <button class="btn btn-sm btn-primary" onclick="app.abrirModalTrocarSenha(false)" style="margin-left: 10px;"><i class="ri-lock-password-line"></i> Alterar Senha</button>
                         <button class="btn btn-sm btn-secondary" onclick="app.doLogout()" style="margin-left: 10px;"><i class="ri-logout-box-r-line"></i> Sair</button>
                     </div>
                 </div>
@@ -190,6 +194,42 @@
                     <canvas id="chartTipo"></canvas>
                 </div>
             </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Servidor Responsável</h3>
+                    <select id="chart-responsavel-type" class="chart-selector">
+                        <option value="bar">Barra</option>
+                        <option value="pie">Pizza</option>
+                    </select>
+                </div>
+                <div class="chart-body">
+                    <canvas id="chartResponsavel"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Escola</h3>
+                    <select id="chart-escola-type" class="chart-selector">
+                        <option value="pie">Pizza</option>
+                        <option value="bar">Barra</option>
+                    </select>
+                </div>
+                <div class="chart-body">
+                    <canvas id="chartEscola"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Setores</h3>
+                    <select id="chart-setor-type" class="chart-selector">
+                        <option value="bar">Barra</option>
+                        <option value="pie">Pizza</option>
+                    </select>
+                </div>
+                <div class="chart-body">
+                    <canvas id="chartSetor"></canvas>
+                </div>
+            </div>
         </div>
     </template>
 
@@ -204,6 +244,10 @@
             <button class="btn btn-danger" onclick="app.resetarContadorDemandas()" title="Zerar a numeração para iniciar do 0001"><i class="ri-refresh-line"></i> Resetar Novo</button>
             <div class="filters">
                 <input type="text" id="filter-search" placeholder="Buscar...">
+                <select id="filter-order" onchange="app.carregarDemandas()">
+                    <option value="desc">Data de Criação (Decrescente)</option>
+                    <option value="asc">Data de Criação (Crescente)</option>
+                </select>
                 <select id="filter-coordenadoria"><option value="">Todas Coordenações</option></select>
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>
                 <select id="filter-tipo"><option value="">Todos Tipos</option></select>
@@ -211,22 +255,20 @@
                 <label><input type="checkbox" id="filter-arquivadas"> Mostrar Arquivadas</label>
                 <label><input type="checkbox" id="filter-com-processo"> Com Processo SIGED</label>
             </div>
+            <div class="column-selector-dropdown">
+                <button class="btn btn-secondary" onclick="app.toggleColumnSelector()"><i class="ri-layout-column-line"></i> Colunas</button>
+                <div id="column-selector-menu" class="column-selector-menu" style="display: none;">
+                    <!-- Checkboxes injetados via JS -->
+                </div>
+            </div>
             <button class="btn btn-secondary" onclick="app.exportExcel()"><i class="ri-file-excel-line"></i> Exportar</button>
         </div>
         
         <div class="table-container">
             <table class="data-table">
                 <thead>
-                    <tr>
-                        <th>Nº</th>
-                        <th>Data</th>
-                        <th>Demandante</th>
-                        <th>Coordenação</th>
-                        <th>Escola</th>
-                        <th>Tipo</th>
-                        <th>Status</th>
-                        <th>Responsável</th>
-                        <th>Ações</th>
+                    <tr id="demandas-thead-tr">
+                        <!-- Injetado dinamicamente via JS -->
                     </tr>
                 </thead>
                 <tbody id="demandas-tbody">
@@ -416,6 +458,86 @@
                 </thead>
                 <tbody id="usuarios-tbody"></tbody>
             </table>
+        </div>
+    </template>
+
+    <!-- View: Contatos -->
+    <template id="view-contatos">
+        <div class="toolbar">
+            <div class="filters">
+                <input type="text" id="filter-contatos-search" placeholder="Buscar contatos..." oninput="app.filtrarContatos()">
+            </div>
+            <button class="btn btn-primary" onclick="app.openModalContato()"><i class="ri-user-add-line"></i> Novo Contato</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Cargo</th>
+                        <th>Função</th>
+                        <th>Instituição</th>
+                        <th>Contato 1</th>
+                        <th>Contato 2</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="contatos-tbody">
+                </tbody>
+            </table>
+        </div>
+    </template>
+
+    <!-- View: Sugestões -->
+    <template id="view-sugestoes">
+        <div class="sugestoes-container" style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div class="card" style="flex: 1; min-width: 300px; padding: 20px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+                <h3>Enviar Sugestão</h3>
+                <form id="sugestaoForm" onsubmit="event.preventDefault(); app.salvarSugestao();">
+                    <div class="form-group">
+                        <label>Seu Nome</label>
+                        <input type="text" id="sugestao-nome" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Sugestão de Melhoria</label>
+                        <textarea id="sugestao-texto" class="form-control" rows="5" required placeholder="Escreva aqui sua sugestão..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btn-enviar-sugestao" style="width: 100%; justify-content: center;"><i class="ri-send-plane-fill"></i> Enviar Sugestão</button>
+                </form>
+            </div>
+            <div class="card" style="flex: 2; min-width: 300px; padding: 20px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); display: flex; flex-direction: column;">
+                <h3><i class="ri-lightbulb-line"></i> Sugestões Enviadas</h3>
+                <div id="lista-sugestoes" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; margin-top: 15px; max-height: 500px;">
+                    <!-- Sugestões injetadas via JS -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- View: Créditos -->
+    <template id="view-creditos">
+        <div style="display: flex; justify-content: center; align-items: flex-start; padding: 30px;">
+            <div class="card" style="max-width: 600px; width: 100%; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 30px; text-align: center;">
+                <img src="assets/img/logo.png" alt="Logo" style="max-height: 80px; margin-bottom: 20px;" onerror="this.style.display='none'">
+                <h2 style="margin-bottom: 5px; color: var(--primary-color);">Gestão de Demandas</h2>
+                <h3 style="margin-bottom: 25px; color: var(--text-muted); font-weight: normal; font-size: 15px;">Coordenadoria Regional de Educação - Manacapuru</h3>
+                
+                <div style="text-align: left; background: var(--background); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 25px;">
+                    <ul style="list-style: none; padding: 0; line-height: 1.8;">
+                        <li><strong>Sérgio Raimundo Ferreira de Araújo</strong> - Desenvolvedor</li>
+                        <li><strong>Willyamy Vieira de Lima</strong> - Desenvolvedor</li>
+                        <li><strong>Sérgio Raimundo Ferreira de Araújo</strong> - Coordenador Administrativo Adjunto</li>
+                        <li><strong>Erivan Barboza da Silva</strong> - Coordenador Pedagógico Adjunto</li>
+                        <li><strong>Meida Amaro Picanço</strong> - Coordenadora Pedagógica Adjunta</li>
+                        <li><strong>Esterlane de Lima Palheta</strong> - Coordenadora Regional de Educação</li>
+                    </ul>
+                </div>
+                
+                <div class="alert" style="background: #fee2e2; border-left: 4px solid #ef4444; color: #991b1b; padding: 15px; border-radius: 4px; text-align: left; font-size: 13px;">
+                    <strong>IMPORTANTE!!!</strong><br>
+                    Este sistema foi desenvolvido pela Coordenadoria Regional de Educação de Manacapuru para organizar e otimizar seus atendimentos, não sendo permitida a utilização para outra finalidade ou por pessoas não autorizadas pelos seus administradores.
+                </div>
+            </div>
         </div>
     </template>
 

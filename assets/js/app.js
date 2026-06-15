@@ -33,12 +33,23 @@ const app = {
     kanbanSortables: [],
     userDoc: null,
     demandasFiltradas: [],
+    colunasVisiveis: [
+        { key: 'numero', label: 'Nº', show: true },
+        { key: 'data', label: 'Data', show: true },
+        { key: 'status', label: 'Status', show: true },
+        { key: 'tipo', label: 'Tipo', show: true },
+        { key: 'demandante', label: 'Demandante', show: true },
+        { key: 'escola', label: 'Escola', show: true },
+        { key: 'responsavel', label: 'Responsável', show: true },
+        { key: 'coordenacao', label: 'Coordenação', show: true }
+    ],
     pagination: {
         currentPage: 1,
         itemsPerPage: 10
     },
 
     init() {
+        this.initColunasVisiveis();
         this.bindNav();
         this.startClock();
         
@@ -87,6 +98,12 @@ const app = {
 
                         await db.collection('usuarios').doc(user.uid).set(newUserDoc);
                         this.userDoc = { uid: user.uid, ...newUserDoc };
+                    }
+                    
+                    if (this.userDoc.primeiro_login) {
+                        this.showApp();
+                        this.abrirModalTrocarSenha(true);
+                    } else {
                         this.showApp();
                     }
                 } else {
@@ -99,6 +116,104 @@ const app = {
                 document.getElementById('login_error').innerText = "Erro Crítico: " + err.message;
             }
         });
+    },
+
+    initColunasVisiveis() {
+        const saved = localStorage.getItem('colunas_visiveis');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                this.colunasVisiveis.forEach(col => {
+                    if (parsed[col.key] !== undefined) col.show = parsed[col.key];
+                });
+            } catch(e) { console.error(e); }
+        }
+    },
+
+    saveColunasVisiveis() {
+        const obj = {};
+        this.colunasVisiveis.forEach(col => obj[col.key] = col.show);
+        localStorage.setItem('colunas_visiveis', JSON.stringify(obj));
+    },
+
+    toggleColumnSelector() {
+        const menu = document.getElementById('column-selector-menu');
+        if (menu) {
+            if (menu.style.display === 'none' || menu.style.display === '') {
+                menu.innerHTML = this.colunasVisiveis.map(col => `
+                    <label>
+                        <input type="checkbox" ${col.show ? 'checked' : ''} onchange="app.toggleColumn('${col.key}', this.checked)">
+                        ${col.label}
+                    </label>
+                `).join('');
+                menu.style.display = 'flex';
+            } else {
+                menu.style.display = 'none';
+            }
+        }
+    },
+
+    toggleColumn(key, show) {
+        const col = this.colunasVisiveis.find(c => c.key === key);
+        if (col) {
+            col.show = show;
+            this.saveColunasVisiveis();
+            this.renderPaginatedTabela();
+        }
+    },
+
+    abrirModalTrocarSenha(isFirstLogin) {
+        const html = `
+            <div class="alert alert-warning" style="margin-bottom: 15px; background: #fffbeb; color: #b45309; padding: 15px; border-radius: 4px; border: 1px solid #fde68a;">
+                ${isFirstLogin ? 'Bem-vindo! No seu primeiro acesso, é obrigatório criar uma nova senha.' : 'Digite sua nova senha abaixo.'}
+            </div>
+            <form id="trocarSenhaForm" onsubmit="event.preventDefault(); app.salvarNovaSenha(${isFirstLogin});">
+                <div class="form-group">
+                    <label>Nova Senha</label>
+                    <input type="password" id="novaSenha" class="form-control" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Nova Senha</label>
+                    <input type="password" id="confirmaSenha" class="form-control" required minlength="6">
+                </div>
+                <div id="erroSenha" style="color:var(--danger-color); margin-bottom: 15px; font-size: 0.85rem;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Confirmar Senha</button>
+            </form>
+        `;
+        this.openModal('Alterar Senha', html, isFirstLogin ? [] : [
+            { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() }
+        ]);
+        if(isFirstLogin) {
+            const btnClose = document.querySelector('.btn-close');
+            if(btnClose) btnClose.style.display = 'none';
+        }
+    },
+
+    async salvarNovaSenha(isFirstLogin) {
+        const p1 = document.getElementById('novaSenha').value;
+        const p2 = document.getElementById('confirmaSenha').value;
+        const erro = document.getElementById('erroSenha');
+        if(p1 !== p2) {
+            erro.innerText = "As senhas não coincidem.";
+            return;
+        }
+        document.getElementById('erroSenha').innerText = "Atualizando...";
+        try {
+            await auth.currentUser.updatePassword(p1);
+            await db.collection('usuarios').doc(this.userDoc.uid).update({ primeiro_login: false });
+            this.userDoc.primeiro_login = false;
+            alert("Senha alterada com sucesso!");
+            this.closeModal();
+            const btnClose = document.querySelector('.btn-close');
+            if(btnClose) btnClose.style.display = 'block';
+        } catch(e) {
+            if(e.code === 'auth/requires-recent-login') {
+                erro.innerText = "Sua sessão expirou. Por favor, faça login novamente para alterar a senha.";
+                setTimeout(() => this.doLogout(), 3000);
+            } else {
+                erro.innerText = "Erro: " + e.message;
+            }
+        }
     },
 
     showLogin() {
@@ -201,7 +316,10 @@ const app = {
             'kanban': 'Quadro Kanban',
             'calendario': 'Calendário de Ações',
             'cadastros': 'Cadastros Básicos',
-            'usuarios': 'Gerenciamento de Usuários'
+            'usuarios': 'Gerenciamento de Usuários',
+            'contatos': 'Agenda de Contatos',
+            'sugestoes': 'Sugestões',
+            'creditos': 'Créditos'
         };
         document.getElementById('page-title').innerText = titles[view] || view;
 
@@ -211,12 +329,14 @@ const app = {
         if (view === 'calendario') this.initCalendario();
         if (view === 'cadastros') this.initCadastros();
         if (view === 'usuarios') this.initUsuarios();
+        if (view === 'contatos') this.initContatos();
+        if (view === 'sugestoes') this.initSugestoes();
     },
 
     // --- DASHBOARD ---
     async initDashboard() {
         let query = db.collection('demandas');
-        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
             query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
         const snap = await query.get();
@@ -225,6 +345,9 @@ const app = {
         let finalizadas = 0, andamento = 0, arquivadas = 0;
         const statusCount = {};
         const tipoCount = {};
+        const respCount = {};
+        const escolaCount = {};
+        const setorCount = {};
 
         demandas.forEach(d => {
             if (d.arquivada) arquivadas++;
@@ -234,6 +357,9 @@ const app = {
             }
             statusCount[d.status_nome] = (statusCount[d.status_nome] || 0) + 1;
             tipoCount[d.tipo_nome] = (tipoCount[d.tipo_nome] || 0) + 1;
+            respCount[d.funcionario_nome] = (respCount[d.funcionario_nome] || 0) + 1;
+            escolaCount[d.escola_nome] = (escolaCount[d.escola_nome] || 0) + 1;
+            setorCount[d.setor_nome] = (setorCount[d.setor_nome] || 0) + 1;
         });
 
         document.getElementById('kpi-total').innerText = demandas.length;
@@ -243,15 +369,30 @@ const app = {
 
         const graficoStatus = Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]}));
         const graficoTipo = Object.keys(tipoCount).map(k => ({label: k || 'S/N', value: tipoCount[k]}));
+        const graficoResp = Object.keys(respCount).map(k => ({label: k || 'S/N', value: respCount[k]}));
+        const graficoEscola = Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]}));
+        const graficoSetor = Object.keys(setorCount).map(k => ({label: k || 'S/N', value: setorCount[k]}));
 
         this.renderChart('chartStatus', graficoStatus, 'bar');
         this.renderChart('chartTipo', graficoTipo, 'pie');
+        this.renderChart('chartResponsavel', graficoResp, 'bar');
+        this.renderChart('chartEscola', graficoEscola, 'pie');
+        this.renderChart('chartSetor', graficoSetor, 'bar');
         
         document.getElementById('chart-status-type').addEventListener('change', (e) => {
             this.renderChart('chartStatus', graficoStatus, e.target.value);
         });
         document.getElementById('chart-tipo-type').addEventListener('change', (e) => {
             this.renderChart('chartTipo', graficoTipo, e.target.value);
+        });
+        document.getElementById('chart-responsavel-type').addEventListener('change', (e) => {
+            this.renderChart('chartResponsavel', graficoResp, e.target.value);
+        });
+        document.getElementById('chart-escola-type').addEventListener('change', (e) => {
+            this.renderChart('chartEscola', graficoEscola, e.target.value);
+        });
+        document.getElementById('chart-setor-type').addEventListener('change', (e) => {
+            this.renderChart('chartSetor', graficoSetor, e.target.value);
         });
     },
 
@@ -322,14 +463,19 @@ const app = {
             let query = db.collection('demandas');
             if(!document.getElementById('filter-arquivadas').checked) {
                 query = query.where('arquivada', '==', false);
+            } else {
+                query = query.where('arquivada', '==', true);
             }
             const snap = await query.get();
             let demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
             
-            // Ordena mais recentes primeiro
+            const order = document.getElementById('filter-order') ? document.getElementById('filter-order').value : 'desc';
+            
+            // Ordena
             demandas.sort((a, b) => {
                 const dateA = new Date(a.data_registro || 0);
                 const dateB = new Date(b.data_registro || 0);
+                if (order === 'asc') return dateA - dateB;
                 return dateB - dateA;
             });
             
@@ -360,11 +506,16 @@ const app = {
     },
 
     renderTabelaDemandas(demandas) {
+        const theadTr = document.getElementById('demandas-thead-tr');
+        if(theadTr) {
+            theadTr.innerHTML = this.colunasVisiveis.filter(c => c.show).map(c => `<th>${c.label}</th>`).join('') + `<th>Ações</th>`;
+        }
+
         const tbody = document.getElementById('demandas-tbody');
         tbody.innerHTML = '';
         
         if (demandas.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma demanda encontrada.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${this.colunasVisiveis.filter(c=>c.show).length + 1}" style="text-align: center; padding: 20px;">Nenhuma demanda encontrada.</td></tr>`;
             return;
         }
 
@@ -372,15 +523,22 @@ const app = {
             try {
                 const tr = document.createElement('tr');
                 const cssStatus = (typeof d.status_nome === 'string') ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
-                tr.innerHTML = `
-                <td>${d.numero_registro || '-'}</td>
-                <td>${this.formatarDataBR(d.data_registro)}</td>
-                <td>${d.demandante_nome || '-'}</td>
-                <td>${d.coordenadoria_nome || '-'}</td>
-                <td>${d.escola_nome || '-'}</td>
-                <td>${d.tipo_nome || '-'}</td>
-                <td>${d.status_nome ? `<span class="badge badge-${cssStatus}">${d.status_nome}</span>` : '-'}</td>
-                <td>${d.funcionario_nome || '-'}</td>
+                
+                let tdHtml = '';
+                this.colunasVisiveis.filter(c => c.show).forEach(c => {
+                    switch(c.key) {
+                        case 'numero': tdHtml += `<td>${d.numero_registro || '-'}</td>`; break;
+                        case 'data': tdHtml += `<td>${this.formatarDataBR(d.data_registro)}</td>`; break;
+                        case 'demandante': tdHtml += `<td>${d.demandante_nome || '-'}</td>`; break;
+                        case 'coordenacao': tdHtml += `<td>${d.coordenadoria_nome || '-'}</td>`; break;
+                        case 'escola': tdHtml += `<td>${d.escola_nome || '-'}</td>`; break;
+                        case 'tipo': tdHtml += `<td>${d.tipo_nome || '-'}</td>`; break;
+                        case 'status': tdHtml += `<td>${d.status_nome ? `<span class="badge badge-${cssStatus}">${d.status_nome}</span>` : '-'}</td>`; break;
+                        case 'responsavel': tdHtml += `<td>${d.funcionario_nome || '-'}</td>`; break;
+                    }
+                });
+
+                tdHtml += `
                 <td>
                     ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
                     ${this.temPermissao('editar_demandas') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>` : ''}
@@ -391,8 +549,9 @@ const app = {
                         : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
                     ) : ''}
                 </td>
-            `;
-            tbody.appendChild(tr);
+                `;
+                tr.innerHTML = tdHtml;
+                tbody.appendChild(tr);
             } catch(e) { 
                 const errTr = document.createElement('tr');
                 errTr.innerHTML = `<td colspan="9" style="color:red;">Erro ao renderizar: ${e.message} - ${e.stack}</td>`;
@@ -412,7 +571,8 @@ const app = {
         
         let filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
-            const matchProc = comProc ? !!(d.processo_siged && d.processo_siged.trim() !== '') : true;
+            const strProc = (d.processo_siged || '').toString().trim();
+            const matchProc = comProc ? (strProc !== '') : true;
             const matchEscola = escola ? d.escola_nome === escola : true;
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;
@@ -420,7 +580,7 @@ const app = {
             return matchTerm && matchProc && matchEscola && matchTipo && matchStatus && matchCoord;
         });
         
-        if (this.userDoc && this.userDoc.role === 'COMUM') {
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
             filtradas = filtradas.filter(d => d.coordenadoria_nome === this.userDoc.coordenadoria_nome);
         }
 
@@ -495,7 +655,11 @@ const app = {
         // Busca o histórico de ações para incluir na ficha
         const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
         let acoes = acoesSnap.docs.map(a => a.data());
-        acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
+        acoes.sort((a, b) => {
+            const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+            if(timeDiff !== 0) return timeDiff;
+            return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+        });
 
         let html = `
             <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
@@ -758,7 +922,11 @@ const app = {
     async carregarAcoesDetalhe(id) {
         const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
         let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        acoes.sort((a, b) => new Date(b.data_acao || 0) - new Date(a.data_acao || 0)); // Mais recentes primeiro
+        acoes.sort((a, b) => {
+            const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+            if(timeDiff !== 0) return timeDiff;
+            return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+        });
 
         const tbody = document.getElementById('detalhe-acoes-tbody');
         if(!tbody) return;
@@ -818,6 +986,7 @@ const app = {
             const acaoData = {
                 demanda_id: this.demandaAbertaId,
                 data_acao: dataAcao,
+                criado_em: new Date().toISOString(),
                 funcionario_nome: resp,
                 descricao: desc,
                 status_nome: status
@@ -860,6 +1029,7 @@ const app = {
         const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
         const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
         const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
+        const setores = (await db.collection('setores').get()).docs.map(d => d.data());
 
         const html = `
             <form id="demandaForm">
@@ -902,6 +1072,13 @@ const app = {
                         <select class="form-control" name="status_nome">
                             <option value="">Selecione...</option>
                             ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Setor</label>
+                        <select class="form-control" name="setor_nome">
+                            <option value="">Selecione...</option>
+                            ${setores.map(x => `<option value="${x.nome}" ${d && d.setor_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
@@ -1032,7 +1209,11 @@ const app = {
 
             const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
             let acoes = acoesSnap.docs.map(a => a.data());
-            acoes.sort((a, b) => new Date(a.data_acao || 0) - new Date(b.data_acao || 0));
+            acoes.sort((a, b) => {
+                const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+                if(timeDiff !== 0) return timeDiff;
+                return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+            });
 
             let html = `
                 <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
@@ -1250,7 +1431,7 @@ const app = {
         const statusList = statusSnap.docs.map(d => d.data());
 
         let query = db.collection('demandas').where('arquivada', '==', false);
-        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
             query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
         const demSnap = await query.get();
@@ -1427,6 +1608,7 @@ const app = {
         
         usuarios.forEach(u => {
             const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
+            const btnReset = (u.login === 'admin' || u.metodo_login === 'google') ? '' : `<button class="btn btn-sm btn-warning" onclick="app.resetarSenhaUsuario('${u.email}', '${u.id}')" title="Enviar link de reset e forçar troca de senha"><i class="ri-mail-send-line"></i></button>`;
             
             let badges = '';
             if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
@@ -1450,12 +1632,25 @@ const app = {
                 <td>${u.role}</td>
                 <td>${badges}</td>
                 <td>
+                    ${btnReset}
                     <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
                     ${btnExcluir}
                 </td>
             `;
             tbody.appendChild(tr);
         });
+    },
+
+    async resetarSenhaUsuario(email, userId) {
+        if(!confirm(`Deseja enviar um e-mail de redefinição de senha para ${email} e forçar troca no login?`)) return;
+        try {
+            await auth.sendPasswordResetEmail(email);
+            await db.collection('usuarios').doc(userId).update({ primeiro_login: true, metodo_login: 'email' });
+            alert('E-mail enviado e flag de primeiro login ativada para este usuário.');
+            this.initUsuarios();
+        } catch(e) {
+            alert("Erro ao enviar reset de senha: " + e.message);
+        }
     },
 
     async openModalUsuario(u = null) {
@@ -1660,6 +1855,168 @@ const app = {
 
     closeModal() {
         document.getElementById('globalModal').classList.remove('active');
+    },
+
+    // --- CONTATOS ---
+    async initContatos() {
+        try {
+            document.body.style.cursor = 'wait';
+            const snap = await db.collection('contatos').get();
+            this.contatosList = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            this.renderContatos();
+        } catch(e) { console.error(e); }
+        document.body.style.cursor = 'default';
+    },
+
+    renderContatos() {
+        const tbody = document.getElementById('contatos-tbody');
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        const term = (document.getElementById('filter-contatos-search')?.value || '').toLowerCase();
+        
+        let filtered = this.contatosList || [];
+        if(term) {
+            filtered = filtered.filter(c => Object.values(c).join(' ').toLowerCase().includes(term));
+        }
+
+        if(filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Nenhum contato encontrado.</td></tr>';
+            return;
+        }
+
+        filtered.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${c.nome || '-'}</td>
+                <td>${c.cargo || '-'}</td>
+                <td>${c.funcao || '-'}</td>
+                <td>${c.instituicao || '-'}</td>
+                <td>${c.contato1 || '-'}</td>
+                <td>${c.contato2 || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick='app.openModalContato(${JSON.stringify(c)})'><i class="ri-edit-line"></i></button>
+                    ${this.temPermissao('gerenciar_cadastros') || this.userDoc.role === 'ADM' ? `<button class="btn btn-sm btn-danger" onclick="app.excluirContato('${c.id}')"><i class="ri-delete-bin-line"></i></button>` : ''}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    },
+
+    filtrarContatos() {
+        this.renderContatos();
+    },
+
+    openModalContato(c = null) {
+        const html = `
+            <form id="contatoForm">
+                ${c ? `<input type="hidden" name="id" value="${c.id}">` : ''}
+                <div class="form-group"><label>Nome</label><input type="text" class="form-control" name="nome" value="${c ? (c.nome||'') : ''}" required></div>
+                <div class="form-group"><label>Cargo</label><input type="text" class="form-control" name="cargo" value="${c ? (c.cargo||'') : ''}"></div>
+                <div class="form-group"><label>Função</label><input type="text" class="form-control" name="funcao" value="${c ? (c.funcao||'') : ''}"></div>
+                <div class="form-group"><label>Instituição</label><input type="text" class="form-control" name="instituicao" value="${c ? (c.instituicao||'') : ''}"></div>
+                <div class="form-group"><label>Contato 1</label><input type="text" class="form-control" name="contato1" value="${c ? (c.contato1||'') : ''}"></div>
+                <div class="form-group"><label>Contato 2</label><input type="text" class="form-control" name="contato2" value="${c ? (c.contato2||'') : ''}"></div>
+            </form>
+        `;
+        this.openModal(c ? 'Editar Contato' : 'Novo Contato', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarContato(!!c) }
+        ]);
+    },
+
+    async salvarContato(isEdit) {
+        const form = document.getElementById('contatoForm');
+        if(!form.checkValidity()) return form.reportValidity();
+        const data = Object.fromEntries(new FormData(form));
+        try {
+            if(isEdit) {
+                const id = data.id;
+                delete data.id;
+                await db.collection('contatos').doc(id).update(data);
+            } else {
+                await db.collection('contatos').add(data);
+            }
+            this.closeModal();
+            this.initContatos();
+        } catch(e) { console.error(e); alert("Erro ao salvar contato."); }
+    },
+
+    async excluirContato(id) {
+        if(confirm("Deseja realmente excluir este contato?")) {
+            await db.collection('contatos').doc(id).delete();
+            this.initContatos();
+        }
+    },
+
+    // --- SUGESTOES ---
+    async initSugestoes() {
+        document.getElementById('sugestao-nome').value = this.userDoc.login || this.userDoc.email || '';
+        document.getElementById('sugestao-texto').value = '';
+        this.carregarSugestoes();
+    },
+
+    async carregarSugestoes() {
+        const lista = document.getElementById('lista-sugestoes');
+        if(!lista) return;
+        lista.innerHTML = 'Carregando...';
+        
+        try {
+            let query = db.collection('sugestoes').orderBy('data', 'desc');
+            if (this.userDoc.role !== 'ADM') {
+                query = query.where('uid', '==', this.userDoc.uid);
+            }
+            const snap = await query.get();
+            
+            if(snap.empty) {
+                lista.innerHTML = '<div style="color:var(--text-muted);">Nenhuma sugestão enviada.</div>';
+                return;
+            }
+            
+            lista.innerHTML = snap.docs.map(d => {
+                const s = d.data();
+                return `
+                    <div style="background:var(--background); padding:15px; border-radius:var(--radius-md); border:1px solid var(--border);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                            <strong><i class="ri-user-line"></i> ${s.nome}</strong>
+                            <small style="color:var(--text-muted);">${new Date(s.data).toLocaleString('pt-BR')}</small>
+                        </div>
+                        <div style="white-space:pre-wrap; color:var(--text-main); font-size:14px;">${s.texto}</div>
+                        ${this.userDoc.role === 'ADM' ? `<button class="btn btn-sm btn-danger" style="margin-top:10px;" onclick="app.excluirSugestao('${d.id}')">Excluir</button>` : ''}
+                    </div>
+                `;
+            }).join('');
+        } catch(e) { console.error(e); lista.innerHTML = 'Erro ao carregar sugestões.'; }
+    },
+
+    async salvarSugestao() {
+        const nome = document.getElementById('sugestao-nome').value;
+        const texto = document.getElementById('sugestao-texto').value;
+        const btn = document.getElementById('btn-enviar-sugestao');
+        btn.disabled = true;
+        btn.innerText = 'Enviando...';
+        
+        try {
+            await db.collection('sugestoes').add({
+                uid: this.userDoc.uid,
+                nome: nome,
+                texto: texto,
+                data: new Date().toISOString()
+            });
+            document.getElementById('sugestao-texto').value = '';
+            alert("Sua sugestão foi enviada com sucesso! Muito obrigado.");
+            this.carregarSugestoes();
+        } catch(e) {
+            console.error(e);
+            alert("Erro ao enviar sugestão.");
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-send-plane-fill"></i> Enviar Sugestão';
+    },
+
+    async excluirSugestao(id) {
+        if(confirm("Apagar esta sugestão?")) {
+            await db.collection('sugestoes').doc(id).delete();
+            this.carregarSugestoes();
+        }
     }
 };
 
