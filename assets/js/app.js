@@ -139,19 +139,33 @@ const app = {
 
     toggleColumnSelector() {
         const menu = document.getElementById('column-selector-menu');
-        if (menu) {
-            if (menu.style.display === 'none' || menu.style.display === '') {
-                menu.innerHTML = this.colunasVisiveis.map(col => `
-                    <label>
-                        <input type="checkbox" ${col.show ? 'checked' : ''} onchange="app.toggleColumn('${col.key}', this.checked)">
-                        ${col.label}
-                    </label>
-                `).join('');
-                menu.style.display = 'flex';
-            } else {
-                menu.style.display = 'none';
-            }
+        const wrapper = menu?.closest('.column-selector-dropdown');
+        if (!menu) return;
+
+        const isOpen = menu.style.display === 'flex';
+        if (isOpen) {
+            menu.style.display = 'none';
+            return;
         }
+
+        // Renderiza os checkboxes
+        menu.innerHTML = this.colunasVisiveis.map(col => `
+            <label>
+                <input type="checkbox" ${col.show ? 'checked' : ''} onchange="app.toggleColumn('${col.key}', this.checked)">
+                ${col.label}
+            </label>
+        `).join('');
+        menu.style.display = 'flex';
+
+        // Fecha ao clicar fora — listener único e auto-removível
+        const fecharFora = (e) => {
+            if (wrapper && !wrapper.contains(e.target)) {
+                menu.style.display = 'none';
+                document.removeEventListener('click', fecharFora, true);
+            }
+        };
+        // Usa capture para capturar antes do bubbling; setTimeout evita fechar no mesmo clique
+        setTimeout(() => document.addEventListener('click', fecharFora, true), 0);
     },
 
     toggleColumn(key, show) {

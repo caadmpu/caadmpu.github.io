@@ -374,8 +374,8 @@ body {
 .column-selector-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
-    left: auto;
+    right: auto;
+    left: 0;
     margin-left: 0;
     z-index: 99999;
     background: var(--surface);
