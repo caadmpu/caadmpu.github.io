@@ -45,6 +45,10 @@ body {
     flex-direction: column;
     z-index: 10;
     box-shadow: var(--shadow-sm);
+    transition: margin-left 0.3s ease;
+}
+.sidebar.hidden {
+    margin-left: -260px;
 }
 
 .sidebar-header {
@@ -345,6 +349,21 @@ body {
     font-family: inherit;
 }
 
+.filter-toggle {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.filter-toggle[data-active="true"] {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
 .column-selector-dropdown {
     position: relative;
     display: inline-block;
@@ -354,7 +373,7 @@ body {
     position: absolute;
     top: 100%;
     right: 0;
-    z-index: 100;
+    z-index: 9999;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);

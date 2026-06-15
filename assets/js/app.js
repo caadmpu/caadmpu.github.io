@@ -162,6 +162,19 @@ const app = {
         }
     },
 
+    toggleSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        if(sidebar) sidebar.classList.toggle('hidden');
+    },
+
+    toggleFilterBtn(id, callback) {
+        const btn = document.getElementById(id);
+        if(!btn) return;
+        const isActive = btn.getAttribute('data-active') === 'true';
+        btn.setAttribute('data-active', !isActive);
+        if (callback) callback();
+    },
+
     abrirModalTrocarSenha(isFirstLogin) {
         const html = `
             <div class="alert alert-warning" style="margin-bottom: 15px; background: #fffbeb; color: #b45309; padding: 15px; border-radius: 4px; border: 1px solid #fde68a;">
@@ -423,12 +436,10 @@ const app = {
         this.carregarDemandas();
         
         document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-com-processo').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
         document.getElementById('filter-status').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-arquivadas').addEventListener('change', () => this.carregarDemandas());
     },
 
     async loadFiltrosDemandas() {
@@ -461,7 +472,7 @@ const app = {
         try {
             document.body.style.cursor = 'wait';
             let query = db.collection('demandas');
-            if(!document.getElementById('filter-arquivadas').checked) {
+            if(document.getElementById('filter-arquivadas').getAttribute('data-active') !== 'true') {
                 query = query.where('arquivada', '==', false);
             } else {
                 query = query.where('arquivada', '==', true);
@@ -563,7 +574,7 @@ const app = {
 
     filtrarTabelaDemandas() {
         const term = document.getElementById('filter-search').value.toLowerCase();
-        const comProc = document.getElementById('filter-com-processo').checked;
+        const comProc = document.getElementById('filter-com-processo').getAttribute('data-active') === 'true';
         const escola = document.getElementById('filter-escola').value;
         const tipo = document.getElementById('filter-tipo').value;
         const status = document.getElementById('filter-status').value;
@@ -572,7 +583,7 @@ const app = {
         let filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
             const strProc = (d.processo_siged || '').toString().trim();
-            const matchProc = comProc ? (strProc !== '') : true;
+            const matchProc = comProc ? (strProc !== '' && strProc !== '-') : true;
             const matchEscola = escola ? d.escola_nome === escola : true;
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;

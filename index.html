@@ -107,7 +107,8 @@
         <!-- Conteúdo Principal -->
         <main class="main-content">
             <header class="topbar">
-                <div class="topbar-left">
+                <div class="topbar-left" style="display:flex; align-items:center; gap: 15px;">
+                    <button class="btn btn-sm btn-secondary" onclick="app.toggleSidebar()"><i class="ri-menu-line"></i></button>
                     <h1 id="page-title">Dashboard</h1>
                 </div>
                 <div class="topbar-right">
@@ -252,8 +253,8 @@
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>
                 <select id="filter-tipo"><option value="">Todos Tipos</option></select>
                 <select id="filter-status"><option value="">Todos Status</option></select>
-                <label><input type="checkbox" id="filter-arquivadas"> Mostrar Arquivadas</label>
-                <label><input type="checkbox" id="filter-com-processo"> Com Processo SIGED</label>
+                <button id="filter-arquivadas" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-arquivadas', () => app.carregarDemandas())"><i class="ri-archive-line"></i> Mostrar Arquivadas</button>
+                <button id="filter-com-processo" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-com-processo', () => app.filtrarTabelaDemandas())"><i class="ri-file-text-line"></i> Com Processo SIGED</button>
             </div>
             <div class="column-selector-dropdown">
                 <button class="btn btn-secondary" onclick="app.toggleColumnSelector()"><i class="ri-layout-column-line"></i> Colunas</button>
