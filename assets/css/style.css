@@ -152,6 +152,8 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+    z-index: 15;
 }
 
 .topbar {
@@ -371,9 +373,11 @@ body {
 
 .column-selector-menu {
     position: absolute;
-    top: 100%;
-    right: 0;
-    z-index: 9999;
+    top: 0;
+    left: 100%;
+    margin-left: 10px;
+    right: auto;
+    z-index: 99999;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);

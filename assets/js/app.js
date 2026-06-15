@@ -582,8 +582,9 @@ const app = {
         
         let filtradas = window.todasDemandas.filter(d => {
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
-            const strProc = (d.processo_siged || '').toString().trim();
-            const matchProc = comProc ? (strProc !== '' && strProc !== '-') : true;
+            const strProc = (d.processo_siged || '').toString().trim().toLowerCase();
+            const isInvalid = strProc === '' || strProc === '-' || strProc === 's/n' || strProc === 'n/a' || strProc === 'não' || strProc === 'nao';
+            const matchProc = comProc ? !isInvalid : true;
             const matchEscola = escola ? d.escola_nome === escola : true;
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;
