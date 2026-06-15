@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
     <!-- Estilo Principal -->
-    <link rel="stylesheet" href="assets/css/style.css?v=2">
+    <link rel="stylesheet" href="assets/css/style.css?v=3">
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -474,22 +474,8 @@
             </div>
             <button class="btn btn-primary" onclick="app.openModalContato()"><i class="ri-user-add-line"></i> Novo Contato</button>
         </div>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>Cargo</th>
-                        <th>Função</th>
-                        <th>Instituição</th>
-                        <th>Contato 1</th>
-                        <th>Contato 2</th>
-                        <th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="contatos-tbody">
-                </tbody>
-            </table>
+        <div id="contatos-grid" class="contatos-grid">
+            <!-- Cartões injetados via JS -->
         </div>
     </template>
 

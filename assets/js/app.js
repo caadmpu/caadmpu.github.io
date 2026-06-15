@@ -1977,9 +1977,9 @@ const app = {
     },
 
     renderContatos() {
-        const tbody = document.getElementById('contatos-tbody');
-        if(!tbody) return;
-        tbody.innerHTML = '';
+        const grid = document.getElementById('contatos-grid');
+        if(!grid) return;
+        grid.innerHTML = '';
         const term = (document.getElementById('filter-contatos-search')?.value || '').toLowerCase();
         
         let filtered = this.contatosList || [];
@@ -1988,25 +1988,61 @@ const app = {
         }
 
         if(filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Nenhum contato encontrado.</td></tr>';
+            grid.innerHTML = `
+                <div class="contatos-empty">
+                    <i class="ri-contacts-book-line"></i>
+                    <p>Nenhum contato encontrado.</p>
+                </div>
+            `;
             return;
         }
 
         filtered.forEach(c => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${c.nome || '-'}</td>
-                <td>${c.cargo || '-'}</td>
-                <td>${c.funcao || '-'}</td>
-                <td>${c.instituicao || '-'}</td>
-                <td>${c.contato1 || '-'}</td>
-                <td>${c.contato2 || '-'}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary" onclick='app.openModalContato(${JSON.stringify(c)})'><i class="ri-edit-line"></i></button>
-                    ${this.temPermissao('gerenciar_cadastros') || this.userDoc.role === 'ADM' ? `<button class="btn btn-sm btn-danger" onclick="app.excluirContato('${c.id}')"><i class="ri-delete-bin-line"></i></button>` : ''}
-                </td>
+            // Gera iniciais do avatar
+            const partes = (c.nome || 'S N').trim().split(' ');
+            const iniciais = (partes[0][0] + (partes[1] ? partes[1][0] : '')).toUpperCase();
+
+            // Gera cor baseada no nome
+            const cores = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#6366f1'];
+            const idx = (c.nome || '').charCodeAt(0) % cores.length;
+            const cor = cores[idx];
+
+            const podeEditar = true;
+            const podeExcluir = this.temPermissao('gerenciar_cadastros') || this.userDoc.role === 'ADM';
+
+            const emailLink = c.email
+                ? `<a href="mailto:${c.email}" class="contato-chip contato-chip-email" title="Enviar e-mail"><i class="ri-mail-line"></i> ${c.email}</a>`
+                : '';
+            const tel1 = c.contato1
+                ? `<span class="contato-chip"><i class="ri-phone-line"></i> ${c.contato1}</span>`
+                : '';
+            const tel2 = c.contato2
+                ? `<span class="contato-chip"><i class="ri-phone-2-line"></i> ${c.contato2}</span>`
+                : '';
+
+            const card = document.createElement('div');
+            card.className = 'contato-card';
+            card.innerHTML = `
+                <div class="contato-card-header" style="--card-color: ${cor}">
+                    <div class="contato-avatar" style="background: ${cor}">${iniciais}</div>
+                    <div class="contato-card-actions">
+                        ${podeEditar ? `<button class="btn-icon" onclick='app.openModalContato(${JSON.stringify(c)})' title="Editar"><i class="ri-edit-line"></i></button>` : ''}
+                        ${podeExcluir ? `<button class="btn-icon btn-icon-danger" onclick="app.excluirContato('${c.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
+                    </div>
+                </div>
+                <div class="contato-card-body">
+                    <h3 class="contato-nome">${c.nome || '-'}</h3>
+                    ${c.cargo ? `<span class="contato-badge">${c.cargo}</span>` : ''}
+                    ${c.funcao ? `<span class="contato-badge contato-badge-alt">${c.funcao}</span>` : ''}
+                    <div class="contato-info">
+                        ${c.instituicao ? `<div class="contato-info-row"><i class="ri-building-line"></i><span>${c.instituicao}</span></div>` : ''}
+                    </div>
+                    <div class="contato-chips">
+                        ${tel1}${tel2}${emailLink}
+                    </div>
+                </div>
             `;
-            tbody.appendChild(tr);
+            grid.appendChild(card);
         });
     },
 
@@ -2018,12 +2054,13 @@ const app = {
         const html = `
             <form id="contatoForm">
                 ${c ? `<input type="hidden" name="id" value="${c.id}">` : ''}
-                <div class="form-group"><label>Nome</label><input type="text" class="form-control" name="nome" value="${c ? (c.nome||'') : ''}" required></div>
-                <div class="form-group"><label>Cargo</label><input type="text" class="form-control" name="cargo" value="${c ? (c.cargo||'') : ''}"></div>
-                <div class="form-group"><label>Função</label><input type="text" class="form-control" name="funcao" value="${c ? (c.funcao||'') : ''}"></div>
-                <div class="form-group"><label>Instituição</label><input type="text" class="form-control" name="instituicao" value="${c ? (c.instituicao||'') : ''}"></div>
-                <div class="form-group"><label>Contato 1</label><input type="text" class="form-control" name="contato1" value="${c ? (c.contato1||'') : ''}"></div>
-                <div class="form-group"><label>Contato 2</label><input type="text" class="form-control" name="contato2" value="${c ? (c.contato2||'') : ''}"></div>
+                <div class="form-group"><label>Nome *</label><input type="text" class="form-control" name="nome" value="${c ? (c.nome||'') : ''}" required placeholder="Nome completo"></div>
+                <div class="form-group"><label>Cargo</label><input type="text" class="form-control" name="cargo" value="${c ? (c.cargo||'') : ''}" placeholder="Ex: Diretor, Coordenador..."></div>
+                <div class="form-group"><label>Função</label><input type="text" class="form-control" name="funcao" value="${c ? (c.funcao||'') : ''}" placeholder="Ex: Gestão Escolar..."></div>
+                <div class="form-group"><label>Instituição</label><input type="text" class="form-control" name="instituicao" value="${c ? (c.instituicao||'') : ''}" placeholder="Ex: Escola Estadual..."></div>
+                <div class="form-group"><label>E-mail</label><input type="email" class="form-control" name="email" value="${c ? (c.email||'') : ''}" placeholder="exemplo@email.com"></div>
+                <div class="form-group"><label>Contato 1 (Telefone/WhatsApp)</label><input type="text" class="form-control" name="contato1" value="${c ? (c.contato1||'') : ''}" placeholder="(92) 9XXXX-XXXX"></div>
+                <div class="form-group"><label>Contato 2</label><input type="text" class="form-control" name="contato2" value="${c ? (c.contato2||'') : ''}" placeholder="(92) 9XXXX-XXXX"></div>
             </form>
         `;
         this.openModal(c ? 'Editar Contato' : 'Novo Contato', html, [
