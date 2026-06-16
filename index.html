@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
     <!-- Estilo Principal -->
-    <link rel="stylesheet" href="assets/css/style.css?v=3">
+    <link rel="stylesheet" href="assets/css/style.css?v=4">
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -170,66 +170,36 @@
             </div>
         </div>
         
-        <div class="dashboard-charts">
-            <div class="chart-container">
-                <div class="chart-header">
-                    <h3>Demandas por Status</h3>
-                    <select id="chart-status-type" class="chart-selector">
-                        <option value="bar">Barra</option>
-                        <option value="pie">Pizza</option>
-                    </select>
+        <!-- Seletor de Gráfico -->
+        <div class="chart-switcher-bar">
+            <div class="chart-switcher-label"><i class="ri-bar-chart-2-line"></i> Visualizar Gráfico:</div>
+            <div class="chart-switcher-tabs" id="chartSwitcherTabs">
+                <button class="chart-tab active" data-chart="status"><i class="ri-pie-chart-line"></i> Demandas por Status</button>
+                <button class="chart-tab" data-chart="tipo"><i class="ri-list-check"></i> Por Tipo</button>
+                <button class="chart-tab" data-chart="responsavel"><i class="ri-user-line"></i> Por Responsável</button>
+                <button class="chart-tab" data-chart="escola"><i class="ri-building-line"></i> Por Escola</button>
+                <button class="chart-tab" data-chart="setor"><i class="ri-layout-grid-line"></i> Por Setor</button>
+            </div>
+        </div>
+
+        <!-- Painel único de gráfico -->
+        <div class="chart-container chart-container-single" id="mainChartPanel">
+            <div class="chart-header">
+                <div class="chart-title-wrap">
+                    <div class="chart-icon-badge" id="mainChartIconBadge"><i class="ri-pie-chart-line"></i></div>
+                    <h3 id="mainChartTitle">Demandas por Status</h3>
                 </div>
-                <div class="chart-body">
-                    <canvas id="chartStatus"></canvas>
+                <div class="chart-controls">
+                    <select id="mainChartTypeSelector" class="chart-selector">
+                        <option value="bar">Barras</option>
+                        <option value="pie">Pizza</option>
+                        <option value="doughnut">Rosca</option>
+                        <option value="polarArea">Área Polar</option>
+                    </select>
                 </div>
             </div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <h3>Demandas por Tipo</h3>
-                    <select id="chart-tipo-type" class="chart-selector">
-                        <option value="pie">Pizza</option>
-                        <option value="bar">Barra</option>
-                    </select>
-                </div>
-                <div class="chart-body">
-                    <canvas id="chartTipo"></canvas>
-                </div>
-            </div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <h3>Servidor Responsável</h3>
-                    <select id="chart-responsavel-type" class="chart-selector">
-                        <option value="bar">Barra</option>
-                        <option value="pie">Pizza</option>
-                    </select>
-                </div>
-                <div class="chart-body">
-                    <canvas id="chartResponsavel"></canvas>
-                </div>
-            </div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <h3>Escola</h3>
-                    <select id="chart-escola-type" class="chart-selector">
-                        <option value="pie">Pizza</option>
-                        <option value="bar">Barra</option>
-                    </select>
-                </div>
-                <div class="chart-body">
-                    <canvas id="chartEscola"></canvas>
-                </div>
-            </div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <h3>Setores</h3>
-                    <select id="chart-setor-type" class="chart-selector">
-                        <option value="bar">Barra</option>
-                        <option value="pie">Pizza</option>
-                    </select>
-                </div>
-                <div class="chart-body">
-                    <canvas id="chartSetor"></canvas>
-                </div>
+            <div class="chart-body chart-body-large">
+                <canvas id="mainChartCanvas"></canvas>
             </div>
         </div>
     </template>
@@ -549,6 +519,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="assets/js/app.js?v=15"></script>
+    <script src="assets/js/app.js?v=16"></script>
 </body>
 </html>

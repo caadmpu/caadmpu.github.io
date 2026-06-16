@@ -369,13 +369,9 @@ const app = {
         }
         const snap = await query.get();
         const demandas = snap.docs.map(d => d.data());
-        
+
         let finalizadas = 0, andamento = 0, arquivadas = 0;
-        const statusCount = {};
-        const tipoCount = {};
-        const respCount = {};
-        const escolaCount = {};
-        const setorCount = {};
+        const statusCount = {}, tipoCount = {}, respCount = {}, escolaCount = {}, setorCount = {};
 
         demandas.forEach(d => {
             if (d.arquivada) arquivadas++;
@@ -395,41 +391,65 @@ const app = {
         document.getElementById('kpi-andamento').innerText = andamento;
         document.getElementById('kpi-arquivadas').innerText = arquivadas;
 
-        const graficoStatus = Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]}));
-        const graficoTipo = Object.keys(tipoCount).map(k => ({label: k || 'S/N', value: tipoCount[k]}));
-        const graficoResp = Object.keys(respCount).map(k => ({label: k || 'S/N', value: respCount[k]}));
-        const graficoEscola = Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]}));
-        const graficoSetor = Object.keys(setorCount).map(k => ({label: k || 'S/N', value: setorCount[k]}));
+        // Datasets indexados por chave de tab
+        this._dashCharts = {
+            status:     { data: Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),  title: 'Demandas por Status',       icon: 'ri-pie-chart-line',   defaultType: 'bar' },
+            tipo:       { data: Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),    title: 'Demandas por Tipo',         icon: 'ri-list-check',       defaultType: 'pie' },
+            responsavel:{ data: Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),    title: 'Servidor Responsável',      icon: 'ri-user-line',        defaultType: 'bar' },
+            escola:     { data: Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),  title: 'Por Escola',                icon: 'ri-building-line',    defaultType: 'pie' },
+            setor:      { data: Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]})),   title: 'Por Setor',                 icon: 'ri-layout-grid-line', defaultType: 'bar' }
+        };
 
-        this.renderChart('chartStatus', graficoStatus, 'bar');
-        this.renderChart('chartTipo', graficoTipo, 'pie');
-        this.renderChart('chartResponsavel', graficoResp, 'bar');
-        this.renderChart('chartEscola', graficoEscola, 'pie');
-        this.renderChart('chartSetor', graficoSetor, 'bar');
-        
-        document.getElementById('chart-status-type').addEventListener('change', (e) => {
-            this.renderChart('chartStatus', graficoStatus, e.target.value);
+        this._activeChart = 'status';
+        this._renderMainChart();
+
+        // Tabs de seleção de gráfico
+        document.querySelectorAll('#chartSwitcherTabs .chart-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#chartSwitcherTabs .chart-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._activeChart = btn.getAttribute('data-chart');
+                const cfg = this._dashCharts[this._activeChart];
+                document.getElementById('mainChartTypeSelector').value = cfg.defaultType;
+                this._renderMainChart();
+            });
         });
-        document.getElementById('chart-tipo-type').addEventListener('change', (e) => {
-            this.renderChart('chartTipo', graficoTipo, e.target.value);
+
+        // Seletor de tipo
+        document.getElementById('mainChartTypeSelector').addEventListener('change', (e) => {
+            this._dashCharts[this._activeChart].defaultType = e.target.value;
+            this._renderMainChart();
         });
-        document.getElementById('chart-responsavel-type').addEventListener('change', (e) => {
-            this.renderChart('chartResponsavel', graficoResp, e.target.value);
-        });
-        document.getElementById('chart-escola-type').addEventListener('change', (e) => {
-            this.renderChart('chartEscola', graficoEscola, e.target.value);
-        });
-        document.getElementById('chart-setor-type').addEventListener('change', (e) => {
-            this.renderChart('chartSetor', graficoSetor, e.target.value);
-        });
+    },
+
+    _renderMainChart() {
+        const cfg = this._dashCharts[this._activeChart];
+        if (!cfg) return;
+
+        // Atualiza título e ícone
+        document.getElementById('mainChartTitle').innerText = cfg.title;
+        document.getElementById('mainChartIconBadge').innerHTML = `<i class="${cfg.icon}"></i>`;
+
+        this.renderChart('mainChartCanvas', cfg.data, cfg.defaultType);
     },
 
     renderChart(canvasId, dataArr, type) {
         if (this.charts[canvasId]) this.charts[canvasId].destroy();
-        const ctx = document.getElementById(canvasId).getContext('2d');
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
         const labels = dataArr.map(d => d.label);
         const values = dataArr.map(d => d.value);
-        
+
+        // Paleta de cores vibrante inspirada nos infográficos
+        const vibrantColors = [
+            '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
+            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
+            '#06b6d4', '#a855f7'
+        ];
+
+        const isMultiColor = (type === 'pie' || type === 'doughnut' || type === 'polarArea');
+
         this.charts[canvasId] = new Chart(ctx, {
             type: type,
             data: {
@@ -437,11 +457,47 @@ const app = {
                 datasets: [{
                     label: 'Quantidade',
                     data: values,
-                    backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6'],
-                    borderWidth: 1
+                    backgroundColor: isMultiColor
+                        ? labels.map((_, i) => vibrantColors[i % vibrantColors.length])
+                        : labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
+                    borderColor: isMultiColor ? '#fff' : 'transparent',
+                    borderWidth: isMultiColor ? 2 : 0,
+                    borderRadius: (!isMultiColor) ? 8 : 0,
+                    hoverOffset: isMultiColor ? 10 : 0
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 600, easing: 'easeInOutQuart' },
+                plugins: {
+                    legend: {
+                        position: isMultiColor ? 'right' : 'top',
+                        labels: {
+                            font: { family: "'Inter', sans-serif", size: 12 },
+                            padding: 16,
+                            usePointStyle: true,
+                            pointStyleWidth: 10
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.label}: ${ctx.parsed || ctx.raw} demandas`
+                        }
+                    }
+                },
+                scales: (!isMultiColor) ? {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { family: "'Inter', sans-serif" } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: "'Inter', sans-serif" }, maxRotation: 35, minRotation: 0 }
+                    }
+                } : {}
+            }
         });
     },
 
@@ -1673,7 +1729,12 @@ const app = {
         };
 
         (fields[tabela] || ['nome']).forEach(f => {
-            html += `<div class="form-group"><label>${f.toUpperCase()}</label><input class="form-control" name="${f}" value="${row ? (row[f]||'') : ''}" required></div>`;
+            const isRequired = (f === 'nome');
+            const requiredAttr = isRequired ? 'required' : '';
+            const labelSuffix = isRequired
+                ? ' <span style="color:var(--danger-color); font-size:0.8rem;" title="Campo obrigatório">*</span>'
+                : ' <span style="color:var(--text-muted); font-size:0.75rem; font-weight:400;">(opcional)</span>';
+            html += `<div class="form-group"><label>${f.charAt(0).toUpperCase() + f.slice(1)}${labelSuffix}</label><input class="form-control" name="${f}" value="${row ? (row[f]||'') : ''}" ${requiredAttr} placeholder="${isRequired ? 'Obrigatório' : 'Opcional'}"></div>`;
         });
         html += `</form>`;
 
