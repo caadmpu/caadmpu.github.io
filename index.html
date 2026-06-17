@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
     
     <!-- Estilo Principal -->
-    <link rel="stylesheet" href="assets/css/style.css?v=4">
+    <link rel="stylesheet" href="assets/css/style.css?v=6">
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -139,6 +139,17 @@
                 <p>Coordenadoria Regional de Educação — Manacapuru</p>
             </div>
         </div>
+
+        <!-- Filtro de Coordenação -->
+        <div class="dashboard-coord-filter">
+            <div class="coord-filter-label"><i class="ri-filter-3-line"></i> Exibir por Coordenação:</div>
+            <div class="coord-filter-tabs" id="coordFilterTabs">
+                <button class="coord-tab active" data-coord="TODAS"><i class="ri-global-line"></i> Todas</button>
+                <button class="coord-tab" data-coord="PEDAGÓGICA ADJUNTA"><i class="ri-book-open-line"></i> Pedagógica Adjunta</button>
+                <button class="coord-tab" data-coord="ADMINISTRATIVA ADJUNTA"><i class="ri-building-4-line"></i> Administrativa Adjunta</button>
+            </div>
+        </div>
+
         <div class="dashboard-kpis">
             <div class="kpi-card">
                 <div class="kpi-icon box-primary"><i class="ri-file-copy-2-line"></i></div>
@@ -169,37 +180,41 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Seletor de Gráfico -->
-        <div class="chart-switcher-bar">
-            <div class="chart-switcher-label"><i class="ri-bar-chart-2-line"></i> Visualizar Gráfico:</div>
-            <div class="chart-switcher-tabs" id="chartSwitcherTabs">
-                <button class="chart-tab active" data-chart="status"><i class="ri-pie-chart-line"></i> Demandas por Status</button>
-                <button class="chart-tab" data-chart="tipo"><i class="ri-list-check"></i> Por Tipo</button>
-                <button class="chart-tab" data-chart="responsavel"><i class="ri-user-line"></i> Por Responsável</button>
-                <button class="chart-tab" data-chart="escola"><i class="ri-building-line"></i> Por Escola</button>
-                <button class="chart-tab" data-chart="setor"><i class="ri-layout-grid-line"></i> Por Setor</button>
-            </div>
-        </div>
 
-        <!-- Painel único de gráfico -->
-        <div class="chart-container chart-container-single" id="mainChartPanel">
-            <div class="chart-header">
-                <div class="chart-title-wrap">
-                    <div class="chart-icon-badge" id="mainChartIconBadge"><i class="ri-pie-chart-line"></i></div>
-                    <h3 id="mainChartTitle">Demandas por Status</h3>
+        <!-- Dois gráficos na parte inferior -->
+        <div class="dashboard-charts-row">
+            <!-- Gráfico 2: Selecionável (Barra Horizontal) — ESQUERDA / MAIOR -->
+            <div class="chart-container chart-panel-bar">
+                <div class="chart-panel-header">
+                    <div class="chart-title-wrap">
+                        <div class="chart-icon-badge" id="barChartIconBadge"><i class="ri-bar-chart-horizontal-line"></i></div>
+                        <h3 id="barChartTitle">Por Setor</h3>
+                    </div>
+                    <div class="chart-controls">
+                        <select id="barChartSelector" class="chart-selector">
+                            <option value="setor">Por Setor</option>
+                            <option value="tipo">Por Tipo</option>
+                            <option value="responsavel">Por Responsável</option>
+                            <option value="escola">Por Escola</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="chart-controls">
-                    <select id="mainChartTypeSelector" class="chart-selector">
-                        <option value="bar">Barras</option>
-                        <option value="pie">Pizza</option>
-                        <option value="doughnut">Rosca</option>
-                        <option value="polarArea">Área Polar</option>
-                    </select>
+                <div class="chart-body chart-body-panel">
+                    <canvas id="chartBarCanvas"></canvas>
                 </div>
             </div>
-            <div class="chart-body chart-body-large">
-                <canvas id="mainChartCanvas"></canvas>
+
+            <!-- Gráfico 1: Demandas por Status (Rosca) — DIREITA / MENOR -->
+            <div class="chart-container chart-panel-donut">
+                <div class="chart-panel-header">
+                    <div class="chart-title-wrap">
+                        <div class="chart-icon-badge"><i class="ri-pie-chart-2-line"></i></div>
+                        <h3>Demandas por Status</h3>
+                    </div>
+                </div>
+                <div class="chart-body chart-body-panel">
+                    <canvas id="chartStatusCanvas"></canvas>
+                </div>
             </div>
         </div>
     </template>
@@ -519,6 +534,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="assets/js/app.js?v=16"></script>
+    <script src="assets/js/app.js?v=18"></script>
 </body>
 </html>

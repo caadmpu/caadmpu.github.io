@@ -363,12 +363,42 @@ const app = {
 
     // --- DASHBOARD ---
     async initDashboard() {
+        this._dashCoordFilter = 'TODAS'; // Estado do filtro de coordenação
+
         let query = db.collection('demandas');
         if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
             query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
         const snap = await query.get();
-        const demandas = snap.docs.map(d => d.data());
+        this._todasDemandasDash = snap.docs.map(d => d.data());
+
+        this._renderDashboard();
+
+        // Filtro de Coordenação
+        document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._dashCoordFilter = btn.getAttribute('data-coord');
+                this._renderDashboard();
+            });
+        });
+
+        // Seletor do gráfico de barras
+        document.getElementById('barChartSelector').addEventListener('change', (e) => {
+            this._activeBarChart = e.target.value;
+            this._renderBarChart();
+        });
+    },
+
+    _getDashDemandas() {
+        const all = this._todasDemandasDash || [];
+        if (this._dashCoordFilter === 'TODAS') return all;
+        return all.filter(d => (d.coordenadoria_nome || '').toUpperCase().includes(this._dashCoordFilter.toUpperCase()));
+    },
+
+    _renderDashboard() {
+        const demandas = this._getDashDemandas();
 
         let finalizadas = 0, andamento = 0, arquivadas = 0;
         const statusCount = {}, tipoCount = {}, respCount = {}, escolaCount = {}, setorCount = {};
@@ -391,46 +421,231 @@ const app = {
         document.getElementById('kpi-andamento').innerText = andamento;
         document.getElementById('kpi-arquivadas').innerText = arquivadas;
 
-        // Datasets indexados por chave de tab
-        this._dashCharts = {
-            status:     { data: Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),  title: 'Demandas por Status',       icon: 'ri-pie-chart-line',   defaultType: 'bar' },
-            tipo:       { data: Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),    title: 'Demandas por Tipo',         icon: 'ri-list-check',       defaultType: 'pie' },
-            responsavel:{ data: Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),    title: 'Servidor Responsável',      icon: 'ri-user-line',        defaultType: 'bar' },
-            escola:     { data: Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),  title: 'Por Escola',                icon: 'ri-building-line',    defaultType: 'pie' },
-            setor:      { data: Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]})),   title: 'Por Setor',                 icon: 'ri-layout-grid-line', defaultType: 'bar' }
+        // Armazena os datasets filtrados
+        this._dashChartData = {
+            status:     Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
+            tipo:       Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),
+            responsavel:Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),
+            escola:     Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
+            setor:      Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]}))
         };
 
-        this._activeChart = 'status';
-        this._renderMainChart();
+        this._renderStatusChart();
+        this._renderBarChart();
+    },
 
-        // Tabs de seleção de gráfico
-        document.querySelectorAll('#chartSwitcherTabs .chart-tab').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('#chartSwitcherTabs .chart-tab').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this._activeChart = btn.getAttribute('data-chart');
-                const cfg = this._dashCharts[this._activeChart];
-                document.getElementById('mainChartTypeSelector').value = cfg.defaultType;
-                this._renderMainChart();
-            });
-        });
+    _renderStatusChart() {
+        const data = this._dashChartData.status || [];
+        this.renderDonutChart('chartStatusCanvas', data);
+    },
 
-        // Seletor de tipo
-        document.getElementById('mainChartTypeSelector').addEventListener('change', (e) => {
-            this._dashCharts[this._activeChart].defaultType = e.target.value;
-            this._renderMainChart();
+    _renderBarChart() {
+        const key = this._activeBarChart || (document.getElementById('barChartSelector') ? document.getElementById('barChartSelector').value : 'setor') || 'setor';
+        this._activeBarChart = key;
+        const data = (this._dashChartData || {})[key] || [];
+
+        const titles = { setor: 'Por Setor', tipo: 'Por Tipo', responsavel: 'Por Responsável', escola: 'Por Escola' };
+        const icons  = { setor: 'ri-layout-grid-line', tipo: 'ri-list-check', responsavel: 'ri-user-line', escola: 'ri-building-line' };
+
+        const titleEl = document.getElementById('barChartTitle');
+        const iconEl  = document.getElementById('barChartIconBadge');
+        if (titleEl) titleEl.innerText = titles[key] || key;
+        if (iconEl)  iconEl.innerHTML  = `<i class="${icons[key] || 'ri-bar-chart-horizontal-line'}"></i>`;
+
+        this.renderHorizontalBarChart('chartBarCanvas', data);
+    },
+
+    renderDonutChart(canvasId, dataArr) {
+        if (this.charts[canvasId]) this.charts[canvasId].destroy();
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const labels = dataArr.map(d => d.label);
+        const values = dataArr.map(d => d.value);
+        const total  = values.reduce((s, v) => s + v, 0);
+
+        const vibrantColors = [
+            '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
+            '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7'
+        ];
+
+        // Plugin para texto central
+        const centerTextPlugin = {
+            id: 'centerText',
+            beforeDraw(chart) {
+                const { width, height, ctx } = chart;
+                ctx.restore();
+                const chartArea = chart.chartArea;
+                const cx = (chartArea.left + chartArea.right) / 2;
+                const cy = (chartArea.top + chartArea.bottom) / 2;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Número grande
+                ctx.font = "bold 28px 'Inter', sans-serif";
+                ctx.fillStyle = '#1e293b';
+                ctx.fillText(total, cx, cy - 10);
+
+                // Rótulo menor
+                ctx.font = "500 11px 'Inter', sans-serif";
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('demandas', cx, cy + 14);
+
+                ctx.restore();
+            }
+        };
+
+        this.charts[canvasId] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
+                    borderColor: '#fff',
+                    borderWidth: 3,
+                    hoverOffset: 14
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                animation: { duration: 700, easing: 'easeInOutQuart' },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: "'Inter', sans-serif", size: 11 },
+                            padding: 12,
+                            usePointStyle: true,
+                            pointStyleWidth: 9,
+                            generateLabels: (chart) => {
+                                const data = chart.data;
+                                return data.labels.map((label, i) => {
+                                    const val = data.datasets[0].data[i];
+                                    const pct = total > 0 ? Math.round(val / total * 100) : 0;
+                                    return {
+                                        text: `${label}  ${val} (${pct}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: '#fff',
+                                        lineWidth: 2,
+                                        pointStyle: 'circle',
+                                        index: i
+                                    };
+                                });
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const val = ctx.raw;
+                                const pct = total > 0 ? Math.round(val / total * 100) : 0;
+                                return ` ${ctx.label}: ${val} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [centerTextPlugin]
         });
     },
 
-    _renderMainChart() {
-        const cfg = this._dashCharts[this._activeChart];
-        if (!cfg) return;
+    renderHorizontalBarChart(canvasId, dataArr) {
+        if (this.charts[canvasId]) this.charts[canvasId].destroy();
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
 
-        // Atualiza título e ícone
-        document.getElementById('mainChartTitle').innerText = cfg.title;
-        document.getElementById('mainChartIconBadge').innerHTML = `<i class="${cfg.icon}"></i>`;
+        // Ordena do maior para o menor
+        const sorted = [...dataArr].sort((a, b) => b.value - a.value);
+        const labels = sorted.map(d => d.label);
+        const values = sorted.map(d => d.value);
+        const total  = values.reduce((s, v) => s + v, 0);
 
-        this.renderChart('mainChartCanvas', cfg.data, cfg.defaultType);
+        const vibrantColors = [
+            '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
+            '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7'
+        ];
+
+        this.charts[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Quantidade',
+                    data: values,
+                    backgroundColor: labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
+                    borderColor: 'transparent',
+                    borderWidth: 0,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 700, easing: 'easeInOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const val = ctx.raw;
+                                const pct = total > 0 ? Math.round(val / total * 100) : 0;
+                                return ` ${val} demandas (${pct}%)`;
+                            }
+                        }
+                    },
+                    datalabels: false
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: {
+                            font: { family: "'Inter', sans-serif", size: 11 },
+                            callback: (val) => {
+                                const pct = total > 0 ? Math.round(val / total * 100) : 0;
+                                return val;
+                            }
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: "'Inter', sans-serif", size: 11 },
+                            maxRotation: 0
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'barLabels',
+                afterDatasetsDraw(chart) {
+                    const { ctx, data, scales } = chart;
+                    const dataset = data.datasets[0];
+                    const vals = dataset.data;
+                    const tot = vals.reduce((s, v) => s + v, 0);
+                    ctx.save();
+                    ctx.font = "bold 11px 'Inter', sans-serif";
+                    ctx.fillStyle = '#1e293b';
+                    chart.getDatasetMeta(0).data.forEach((bar, i) => {
+                        const val = vals[i];
+                        const pct = tot > 0 ? Math.round(val / tot * 100) : 0;
+                        const x = bar.x + 6;
+                        const y = bar.y;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(`${val} (${pct}%)`, x, y);
+                    });
+                    ctx.restore();
+                }
+            }]
+        });
     },
 
     renderChart(canvasId, dataArr, type) {
@@ -441,7 +656,6 @@ const app = {
         const labels = dataArr.map(d => d.label);
         const values = dataArr.map(d => d.value);
 
-        // Paleta de cores vibrante inspirada nos infográficos
         const vibrantColors = [
             '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
             '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
@@ -457,9 +671,7 @@ const app = {
                 datasets: [{
                     label: 'Quantidade',
                     data: values,
-                    backgroundColor: isMultiColor
-                        ? labels.map((_, i) => vibrantColors[i % vibrantColors.length])
-                        : labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
+                    backgroundColor: labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
                     borderColor: isMultiColor ? '#fff' : 'transparent',
                     borderWidth: isMultiColor ? 2 : 0,
                     borderRadius: (!isMultiColor) ? 8 : 0,
