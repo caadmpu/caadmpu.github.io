@@ -113,7 +113,7 @@ const app = {
                     this.showLogin();
                 }
             } catch (err) {
-                alert("Erro crítico no login: " + err.message + "\n\nStack: " + err.stack);
+                await this.showAlert("Erro crítico no login: " + err.message + "\n\nStack: " + err.stack);
                 console.error(err);
                 document.getElementById('login_error').innerText = "Erro Crítico: " + err.message;
             }
@@ -259,7 +259,7 @@ const app = {
             await auth.currentUser.updatePassword(p1);
             await db.collection('usuarios').doc(this.userDoc.uid).update({ primeiro_login: false });
             this.userDoc.primeiro_login = false;
-            alert("Senha alterada com sucesso!");
+            await this.showAlert("Senha alterada com sucesso!");
             this.closeModal();
             const btnClose = document.querySelector('.btn-close');
             if(btnClose) btnClose.style.display = 'block';
@@ -356,10 +356,10 @@ const app = {
         
         // Bloqueia telas com base nas novas permissões
         if (view === 'demandas' && !this.temPermissao('visualizar_demandas')) {
-            return alert("Sem permissão para visualizar demandas.");
+            await this.showAlert("Sem permissão para visualizar demandas."); return;
         }
         if (view === 'cadastros' && !this.temPermissao('gerenciar_cadastros')) {
-            return alert("Sem permissão para visualizar cadastros.");
+            await this.showAlert("Sem permissão para visualizar cadastros."); return;
         }
 
         this.currentView = view;
@@ -1060,7 +1060,7 @@ const app = {
     exportExcel() {
         let csvContent = "data:text/csv;charset=utf-8,";
         const rows = window.todasDemandas;
-        if(rows.length === 0) return alert('Sem dados para exportar');
+        if(rows.length === 0) await this.showAlert('Sem dados para exportar'); return;
         
         const header = Object.keys(rows[0]).join(";");
         csvContent += header + "\r\n";
@@ -1081,7 +1081,7 @@ const app = {
 
     exportarRelatorioPDF() {
         const rows = this.demandasFiltradas || [];
-        if (rows.length === 0) return alert("Nenhuma demanda na tabela para exportar.");
+        if (rows.length === 0) await this.showAlert("Nenhuma demanda na tabela para exportar."); return;
 
         const colsVisiveis = this.colunasVisiveis.filter(c => c.show && c.key !== 'processo');
 
@@ -1160,16 +1160,16 @@ const app = {
 
 
     async arquivarDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
-        if(confirm('Arquivar esta demanda?')) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm('Arquivar esta demanda?', 'Arquivar', 'Cancelar', false)) {
             await db.collection('demandas').doc(id).update({ arquivada: true });
             this.carregarDemandas();
         }
     },
     
     async desarquivarDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
-        if(confirm('Desarquivar esta demanda?')) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm('Desarquivar esta demanda?', 'Desarquivar', 'Cancelar', false)) {
             await db.collection('demandas').doc(id).update({ arquivada: false });
             this.carregarDemandas();
         }
@@ -1183,15 +1183,15 @@ const app = {
 
     // --- NOVA TELA DE DETALHES ---
     async excluirDemandaEVoltar(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão.");
-        if(confirm("Tem certeza que deseja excluir esta demanda definitivamente?")) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão."); return; }
+        if(await this.showConfirm("Tem certeza que deseja excluir esta demanda definitivamente?", "Excluir", "Cancelar")) {
             try {
                 await db.collection('demandas').doc(id).delete();
                 const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
                 const batch = db.batch();
                 acoes.forEach(a => batch.delete(a.ref));
                 await batch.commit();
-                alert("Excluída com sucesso.");
+                await this.showAlert("Excluída com sucesso.");
                 this.voltarDemandas();
             } catch(e) { console.error(e); }
         }
@@ -1251,8 +1251,8 @@ const app = {
         this.loadView('demandas');
     },
 
-    abrirFormNovaAcao(isEdit = false) {
-        if(!isEdit && !this.temPermissao('criar_acoes')) return alert("Sem permissão para criar ações");
+    async abrirFormNovaAcao(isEdit = false) {
+        if(!isEdit && !this.temPermissao('criar_acoes')) { await this.showAlert("Sem permissão para criar ações"); return; }
         document.getElementById('detalhe-acao-form-container').style.display = 'block';
         document.getElementById('detalhe-acao-id').value = '';
         document.getElementById('detalhe-acao-descricao').value = '';
@@ -1293,7 +1293,7 @@ const app = {
     },
 
     async editarAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('editar_acoes')) return alert("Sem permissão");
+        if(!this.temPermissao('editar_acoes')) { await this.showAlert("Sem permissão"); return; }
         try {
             const doc = await db.collection('acoes').doc(idAcao).get();
             if(!doc.exists) return;
@@ -1314,7 +1314,7 @@ const app = {
     },
 
     async salvarAcaoDetalhe() {
-        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) return alert("Sem permissão");
+        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) { await this.showAlert("Sem permissão"); return; }
         
         const idAcao = document.getElementById('detalhe-acao-id').value;
         const dataAcao = document.getElementById('detalhe-acao-data').value;
@@ -1348,14 +1348,14 @@ const app = {
             await this.abrirDetalhesDemanda(this.demandaAbertaId); // Recarrega tudo
         } catch(e) {
             console.error(e);
-            alert("Erro ao salvar ação");
+            await this.showAlert("Erro ao salvar ação");
         }
         document.getElementById('btn-salvar-acao-detalhe').innerText = 'Registrar Ação';
     },
 
     async excluirAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('excluir_acoes')) return alert("Sem permissão");
-        if(confirm("Excluir esta ação?")) {
+        if(!this.temPermissao('excluir_acoes')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm("Excluir esta ação?", "Excluir", "Cancelar")) {
             await db.collection('acoes').doc(idAcao).delete();
             await this.carregarAcoesDetalhe(this.demandaAbertaId);
         }
@@ -1363,7 +1363,7 @@ const app = {
 
     // Nova Demanda
     async openModalDemanda(d = null) {
-        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) { await this.showAlert("Sem permissão"); return; }
 
         const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
         const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
@@ -1570,17 +1570,17 @@ const app = {
     },
 
     async resetarContadorDemandas() {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(confirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\\n\\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\\n\\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
             const anoAtual = new Date().getFullYear();
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: 0 });
-            alert("Contador resetado com sucesso! A próxima demanda será a 0001.");
+            await this.showAlert("Contador resetado com sucesso! A próxima demanda será a 0001.");
         }
     },
 
     async renumerarTudo() {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(!confirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\\n\\nDeseja prosseguir?")) return;
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
+        if(!await this.showConfirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\\n\\nDeseja prosseguir?")) return;
         
         try {
             document.body.style.cursor = 'wait';
@@ -1612,13 +1612,13 @@ const app = {
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: seq - 1 });
             
             document.body.style.cursor = 'default';
-            alert(`Sucesso! ${demandas.length} demandas foram renumeradas.`);
+            await this.showAlert(`Sucesso! ${demandas.length} demandas foram renumeradas.`);
             this.carregarDemandas();
             
         } catch(e) {
             document.body.style.cursor = 'default';
             console.error(e);
-            alert("Erro ao renumerar: " + e.message);
+            await this.showAlert("Erro ao renumerar: " + e.message);
         }
     },
 
@@ -1703,14 +1703,14 @@ const app = {
             document.body.removeChild(tempDiv);
         } catch (e) {
             console.error("Erro ao gerar PDF:", e);
-            alert("Erro ao gerar PDF.");
+            await this.showAlert("Erro ao gerar PDF.");
         }
         document.body.style.cursor = 'default';
     },
 
     async excluirDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão para excluir demandas.");
-        if(confirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.")) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão para excluir demandas."); return; }
+        if(await this.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.", "Excluir", "Cancelar")) {
             try {
                 await db.collection('demandas').doc(id).delete();
                 // Opcional: deletar o histórico de ações também
@@ -1719,17 +1719,17 @@ const app = {
                 acoes.forEach(a => batch.delete(a.ref));
                 await batch.commit();
                 
-                alert("Demanda excluída com sucesso!");
+                await this.showAlert("Demanda excluída com sucesso!");
                 this.carregarDemandas();
             } catch(e) {
                 console.error("Erro ao excluir demanda:", e);
-                alert("Erro ao excluir demanda.");
+                await this.showAlert("Erro ao excluir demanda.");
             }
         }
     },
 
-    openModalImportar() {
-        if(!this.temPermissao('criar_demandas')) return alert("Sem permissão");
+    async openModalImportar() {
+        if(!this.temPermissao('criar_demandas')) { await this.showAlert("Sem permissão"); return; }
         
         const html = `
             <div class="alert alert-info" style="margin-bottom: 15px; padding: 15px; background: #e0f2fe; border-radius: 8px; color: #0369a1; border: 1px solid #bae6fd;">
@@ -1751,7 +1751,7 @@ const app = {
 
     async processarImportacao() {
         const text = document.getElementById('importText').value.trim();
-        if(!text) return alert("Cole os dados primeiro!");
+        if(!text) { await this.showAlert("Cole os dados primeiro!"); return; }
 
         const linhas = text.split('\n');
         let sucesso = 0;
@@ -1805,7 +1805,7 @@ const app = {
         }
 
         this.closeModal();
-        alert(`${sucesso} demandas importadas com sucesso!`);
+        await this.showAlert(`${sucesso} demandas importadas com sucesso!`);
         this.carregarDemandas();
     },
 
@@ -1818,9 +1818,9 @@ const app = {
     },
 
     async editarDemanda(id) {
-        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('editar_demandas')) { await this.showAlert("Sem permissão"); return; }
         const doc = await db.collection('demandas').doc(id).get();
-        if(!doc.exists) return alert("Demanda não encontrada.");
+        if(!doc.exists) await this.showAlert("Demanda não encontrada."); return;
         const d = doc.data();
         d.id = doc.id;
         this.openModalDemanda(d);
@@ -1972,7 +1972,7 @@ const app = {
     },
 
     openModalCadastro(row = null) {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
         const tabela = window.currentCadastroTable;
         let html = `<form id="cadastroForm">`;
         if (row) html += `<input type="hidden" name="id" value="${row.id}">`;
@@ -2020,8 +2020,8 @@ const app = {
     },
 
     async deletarCadastro(id) {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(confirm('Excluir este registro?')) {
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm('Excluir este registro?', 'Excluir', 'Cancelar')) {
             await db.collection(window.currentCadastroTable).doc(id).delete();
             this.loadCadastroTable(window.currentCadastroTable);
         }
@@ -2070,14 +2070,14 @@ const app = {
     },
 
     async resetarSenhaUsuario(email, userId) {
-        if(!confirm(`Deseja enviar um e-mail de redefinição de senha para ${email} e forçar troca no login?`)) return;
+        if(!await this.showConfirm(`Deseja enviar um e-mail de redefinição de senha para ${email} e forçar troca no login?`, "Enviar", "Cancelar", false)) return;
         try {
             await auth.sendPasswordResetEmail(email);
             await db.collection('usuarios').doc(userId).update({ primeiro_login: true, metodo_login: 'email' });
-            alert('E-mail enviado e flag de primeiro login ativada para este usuário.');
+            await this.showAlert('E-mail enviado e flag de primeiro login ativada para este usuário.');
             this.initUsuarios();
         } catch(e) {
-            alert("Erro ao enviar reset de senha: " + e.message);
+            await this.showAlert("Erro ao enviar reset de senha: " + e.message);
         }
     },
 
@@ -2204,7 +2204,7 @@ const app = {
                     });
                 } else {
                     const senha = fd.get('senha');
-                    if(!senha) return alert("Por favor, digite a senha inicial.");
+                    if(!senha) await this.showAlert("Por favor, digite a senha inicial."); return;
                     
                     const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
                     const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
@@ -2224,13 +2224,13 @@ const app = {
                 this.closeModal();
                 this.initUsuarios();
             } catch (e) {
-                alert("Erro ao criar usuário: " + e.message);
+                await this.showAlert("Erro ao criar usuário: " + e.message);
             }
         }
     },
 
     async deletarUsuario(id) {
-        if(confirm('Remover acesso deste usuário?')) {
+        if(await this.showConfirm('Remover acesso deste usuário?', 'Remover', 'Cancelar')) {
             await db.collection('usuarios').doc(id).delete();
             this.initUsuarios();
         }
@@ -2259,9 +2259,9 @@ const app = {
                 permissoes: {}
             });
 
-            alert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123');
+            await this.showAlert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123');
         } catch(e) {
-            alert('Erro no setup: ' + e.message);
+            await this.showAlert('Erro no setup: ' + e.message);
         }
     },
 
@@ -2285,7 +2285,102 @@ const app = {
         document.getElementById('globalModal').classList.remove('active');
     },
 
-    // --- CONTATOS ---
+    // =========================================
+    // CUSTOM POPUP (substitui alert/confirm nativos)
+    // =========================================
+
+    _popupResolve: null,
+
+    _getPopupType(msg) {
+        const m = (msg || '').toLowerCase();
+        if (m.includes('sucesso') || m.includes('importad') || m.includes('renumerad') || m.includes('configurad') || m.includes('enviada')) return 'success';
+        if (m.includes('erro') || m.includes('falha') || m.includes('negado')) return 'error';
+        if (m.includes('atenção') || m.includes('atencao') || m.includes('alerta') || m.includes('cuidado') || m.includes('resetad')) return 'warning';
+        if (m.includes('excluir') || m.includes('apagar') || m.includes('remover') || m.includes('deletar') || m.includes('deseja') || m.includes('certeza') || m.includes('zerar') || m.includes('renumerar')) return 'confirm';
+        return 'info';
+    },
+
+    _getPopupIcon(type) {
+        const icons = {
+            success: 'ri-checkbox-circle-fill',
+            error:   'ri-error-warning-fill',
+            warning: 'ri-alert-fill',
+            info:    'ri-information-fill',
+            confirm: 'ri-question-fill'
+        };
+        return icons[type] || icons.info;
+    },
+
+    _getPopupTitle(type) {
+        const titles = {
+            success: 'Sucesso',
+            error:   'Erro',
+            warning: 'Atenção',
+            info:    'Informação',
+            confirm: 'Confirmação'
+        };
+        return titles[type] || 'Aviso';
+    },
+
+    _showPopup(message, type, buttons) {
+        const overlay  = document.getElementById('customPopupOverlay');
+        const iconEl   = document.getElementById('customPopupIcon');
+        const titleEl  = document.getElementById('customPopupTitle');
+        const msgEl    = document.getElementById('customPopupMessage');
+        const actionsEl= document.getElementById('customPopupActions');
+        if (!overlay) { return; }
+
+        iconEl.className  = `custom-popup-icon popup-icon-${type}`;
+        iconEl.innerHTML  = `<i class="${this._getPopupIcon(type)}"></i>`;
+        titleEl.innerText = this._getPopupTitle(type);
+        msgEl.innerText   = message;
+
+        actionsEl.innerHTML = '';
+        buttons.forEach(b => {
+            const btn = document.createElement('button');
+            btn.className = `btn ${b.cls}`;
+            btn.innerText = b.label;
+            btn.onclick = () => {
+                overlay.classList.remove('active');
+                setTimeout(() => { if (this._popupResolve) { this._popupResolve(b.value); this._popupResolve = null; } }, 220);
+            };
+            actionsEl.appendChild(btn);
+        });
+
+        overlay.classList.add('active');
+
+        // Fecha ao clicar no fundo (apenas para alert, não confirm)
+        overlay._bgHandler = (e) => {
+            if (e.target === overlay && buttons.length === 1) {
+                overlay.classList.remove('active');
+                setTimeout(() => { if (this._popupResolve) { this._popupResolve(true); this._popupResolve = null; } }, 220);
+            }
+        };
+        overlay.addEventListener('click', overlay._bgHandler);
+    },
+
+    showAlert(message, typeOverride) {
+        return new Promise(resolve => {
+            this._popupResolve = resolve;
+            const type = typeOverride || this._getPopupType(message);
+            this._showPopup(message, type, [
+                { label: 'OK', cls: 'btn-popup-ok', value: true }
+            ]);
+        });
+    },
+
+    showConfirm(message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = true) {
+        return new Promise(resolve => {
+            this._popupResolve = resolve;
+            const type = this._getPopupType(message);
+            this._showPopup(message, type === 'info' ? 'confirm' : type, [
+                { label: cancelLabel,  cls: 'btn-popup-cancel', value: false },
+                { label: confirmLabel, cls: isDanger ? 'btn-popup-danger' : 'btn-popup-ok', value: true }
+            ]);
+        });
+    },
+
+
     async initContatos() {
         try {
             document.body.style.cursor = 'wait';
@@ -2402,11 +2497,11 @@ const app = {
             }
             this.closeModal();
             this.initContatos();
-        } catch(e) { console.error(e); alert("Erro ao salvar contato."); }
+        } catch(e) { console.error(e); await this.showAlert("Erro ao salvar contato."); }
     },
 
     async excluirContato(id) {
-        if(confirm("Deseja realmente excluir este contato?")) {
+        if(await this.showConfirm("Deseja realmente excluir este contato?", "Excluir", "Cancelar")) {
             await db.collection('contatos').doc(id).delete();
             this.initContatos();
         }
@@ -2467,18 +2562,18 @@ const app = {
                 data: new Date().toISOString()
             });
             document.getElementById('sugestao-texto').value = '';
-            alert("Sua sugestão foi enviada com sucesso! Muito obrigado.");
+            await this.showAlert("Sua sugestão foi enviada com sucesso! Muito obrigado.");
             this.carregarSugestoes();
         } catch(e) {
             console.error(e);
-            alert("Erro ao enviar sugestão.");
+            await this.showAlert("Erro ao enviar sugestão.");
         }
         btn.disabled = false;
         btn.innerHTML = '<i class="ri-send-plane-fill"></i> Enviar Sugestão';
     },
 
     async excluirSugestao(id) {
-        if(confirm("Apagar esta sugestão?")) {
+        if(await this.showConfirm("Apagar esta sugestão?", "Apagar", "Cancelar")) {
             await db.collection('sugestoes').doc(id).delete();
             this.carregarSugestoes();
         }
@@ -2486,3 +2581,6 @@ const app = {
 };
 
 window.onload = () => app.init();
+
+
+
