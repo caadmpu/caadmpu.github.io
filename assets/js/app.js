@@ -1007,17 +1007,17 @@ const app = {
                 </div>
                 
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
                 </table>
                 
-                <div style="margin-bottom: 20px;">
+                <div style="margin-bottom: 20px; page-break-inside: avoid;">
                     <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Descrição</h4>
                     <p style="background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: pre-wrap;">${d.descricao || 'Sem descrição.'}</p>
                 </div>
@@ -1025,7 +1025,7 @@ const app = {
                 <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                     <thead>
-                        <tr style="background: #f1f5f9;">
+                        <tr style="background: #f1f5f9; page-break-inside: avoid;">
                             <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
                             <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Ação</th>
                             <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Responsável</th>
@@ -1033,9 +1033,9 @@ const app = {
                         </tr>
                     </thead>
                     <tbody>
-                        ${acoes.length === 0 ? '<tr><td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr>' : 
+                        ${acoes.length === 0 ? '<tr style="page-break-inside: avoid;"><td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr>' : 
                         acoes.map(a => `
-                            <tr>
+                            <tr style="page-break-inside: avoid;">
                                 <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)}</td>
                                 <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao}</td>
                                 <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome}</td>
@@ -1055,8 +1055,9 @@ const app = {
                     margin: 10,
                     filename: `Demanda_${d.numero_registro.replace('/','_')}.pdf`,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2 },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                 }).save();
             } }
         ]);
@@ -1645,35 +1646,39 @@ const app = {
                     </div>
                     
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                        <tr><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
-                        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
+                        <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
                     </table>
                     
-                    <div style="margin-bottom: 20px;">
+                    <div style="margin-bottom: 20px; page-break-inside: avoid;">
                         <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Descrição</h4>
                         <p style="background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: pre-wrap;">${d.descricao || 'Sem descrição.'}</p>
                     </div>
                     
                     <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
                     <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                        <tr style="background:#f1f5f9;">
-                            <th style="padding: 8px; border: 1px solid #ddd;">Data</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">Ação/Descrição</th>
-                            <th style="padding: 8px; border: 1px solid #ddd;">Usuário</th>
-                        </tr>
+                        <thead>
+                            <tr style="background:#f1f5f9; page-break-inside: avoid;">
+                                <th style="padding: 8px; border: 1px solid #ddd;">Data</th>
+                                <th style="padding: 8px; border: 1px solid #ddd;">Ação/Descrição</th>
+                                <th style="padding: 8px; border: 1px solid #ddd;">Usuário</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                         ${acoes.length ? acoes.map(a => `
-                            <tr>
+                            <tr style="page-break-inside: avoid;">
                                 <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td>
                                 <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao || '-'}</td>
                                 <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome || '-'}</td>
                             </tr>
-                        `).join('') : '<tr><td colspan="3" style="padding: 8px; text-align: center; border: 1px solid #ddd;">Nenhuma ação registrada.</td></tr>'}
+                        `).join('') : '<tr style="page-break-inside: avoid;"><td colspan="3" style="padding: 8px; text-align: center; border: 1px solid #ddd;">Nenhuma ação registrada.</td></tr>'}
+                        </tbody>
                     </table>
                 </div>
             `;
@@ -1688,8 +1693,9 @@ const app = {
                 margin: 10,
                 filename: `Demanda_${d.numero_registro ? d.numero_registro.replace('/','-') : id}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
             };
 
             const pdfBlobUrl = await html2pdf().from(tempDiv.firstElementChild).set(opt).output('bloburl');
