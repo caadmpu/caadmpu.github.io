@@ -14,10 +14,10 @@ const firebaseConfig = {
 // ==========================================
 // DESATIVE A RESTRIÇÃO DE DOMÍNIO PARA TESTES
 // ==========================================
-const DOMINIO_AUTORIZADO = ""; // Deixe vazio para permitir qualquer e-mail
+const DOMINIO_AUTORIZADO = "";
 
 // ==========================================
-// INICIALIZAÇÃO SEGURA (EVITA DUPLICIDADE)
+// INICIALIZAÇÃO SEGURA
 // ==========================================
 console.log("🚀 Iniciando app...");
 
@@ -42,6 +42,7 @@ const app = {
     kanbanSortables: [],
     userDoc: null,
     demandasFiltradas: [],
+    demandaAbertaId: null,
     colunasVisiveis: [
         { key: 'numero', label: 'Nº', show: true },
         { key: 'data', label: 'Data', show: true },
@@ -84,7 +85,6 @@ const app = {
             
             try {
                 if (user) {
-                    // Verifica domínio
                     if (DOMINIO_AUTORIZADO && !user.email.endsWith(DOMINIO_AUTORIZADO) && user.email !== 'admin@admin.com') {
                         console.warn("⛔ Domínio não autorizado:", user.email);
                         await auth.signOut();
@@ -94,12 +94,10 @@ const app = {
                         return;
                     }
 
-                    // Busca ou cria usuário
                     const userRef = db.collection('usuarios').doc(user.uid);
                     let doc = await userRef.get();
                     let userData = doc.exists ? doc.data() : null;
 
-                    // Migração por e-mail
                     if (!userData) {
                         console.log("📂 Usuário não encontrado pelo UID, buscando por e-mail...");
                         const snap = await db.collection('usuarios').where('email', '==', user.email).get();
@@ -112,7 +110,6 @@ const app = {
                         }
                     }
 
-                    // Criação de novo usuário
                     if (!userData) {
                         console.log("🆕 Criando novo usuário para:", user.email);
                         const isAdminMaster = user.email === 'admin@admin.com';
@@ -130,7 +127,6 @@ const app = {
 
                     this.userDoc = { uid: user.uid, ...userData };
                     
-                    // Atualiza interface
                     document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
                     document.getElementById('user-avatar-initial').innerText = 
                         (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
@@ -160,7 +156,6 @@ const app = {
         
         console.log("✅ App inicializado com sucesso!");
         
-        // Botão de emergência para criar Admin
         const loginBox = document.querySelector('.login-box h2');
         if (loginBox) {
             loginBox.style.cursor = 'pointer';
@@ -177,7 +172,6 @@ const app = {
     // CONFIGURA OS BOTÕES DE LOGIN
     // ==========================================
     _setupLoginButtons() {
-        // Botão "Entrar"
         const formLogin = document.getElementById('formLogin');
         if (formLogin) {
             formLogin.addEventListener('submit', (e) => {
@@ -187,7 +181,6 @@ const app = {
             });
         }
 
-        // Botão "Google"
         const googleBtn = document.querySelector('button[onclick*="doLoginGoogle"]');
         if (googleBtn) {
             googleBtn.removeAttribute('onclick');
@@ -200,7 +193,7 @@ const app = {
     },
 
     // ==========================================
-    // LOGIN COM EMAIL/SENHA
+    // LOGIN
     // ==========================================
     async doLogin() {
         console.log("🔐 Tentando login com email/senha...");
@@ -226,9 +219,6 @@ const app = {
         }
     },
 
-    // ==========================================
-    // LOGIN COM GOOGLE
-    // ==========================================
     async doLoginGoogle() {
         console.log("🔐 Tentando login com Google...");
         
@@ -237,9 +227,7 @@ const app = {
         
         try {
             const provider = new firebase.auth.GoogleAuthProvider();
-            provider.setCustomParameters({
-                prompt: 'select_account'
-            });
+            provider.setCustomParameters({ prompt: 'select_account' });
             
             try {
                 const result = await auth.signInWithPopup(provider);
@@ -249,9 +237,7 @@ const app = {
             } catch (popupError) {
                 console.warn("⚠️ Popup falhou, tentando redirect...", popupError.code);
                 
-                if (popupError.code === 'auth/popup-blocked' || 
-                    popupError.code === 'auth/popup-closed-by-user') {
-                    
+                if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/popup-closed-by-user') {
                     errDiv.innerText = 'Popup bloqueado ou fechado. Redirecionando...';
                     await auth.signInWithRedirect(provider);
                     return;
@@ -260,22 +246,10 @@ const app = {
             }
         } catch (error) {
             console.error("❌ Erro no login Google:", error.code, error.message);
-            
-            if (error.code === 'auth/popup-blocked') {
-                errDiv.innerText = "Popup bloqueado! Tente novamente e permita popups.";
-            } else if (error.code === 'auth/popup-closed-by-user') {
-                errDiv.innerText = "Popup fechado. Tente novamente.";
-            } else if (error.code === 'auth/redirect-cancelled-by-user') {
-                errDiv.innerText = "Redirecionamento cancelado. Tente novamente.";
-            } else {
-                errDiv.innerText = this._getFirebaseErrorMessage(error);
-            }
+            errDiv.innerText = this._getFirebaseErrorMessage(error);
         }
     },
 
-    // ==========================================
-    // TRADUTOR DE ERROS
-    // ==========================================
     _getFirebaseErrorMessage(error) {
         const messages = {
             'auth/user-not-found': 'Usuário não encontrado.',
@@ -294,9 +268,6 @@ const app = {
         return messages[error.code] || error.message || 'Erro desconhecido.';
     },
 
-    // ==========================================
-    // DO LOGOUT
-    // ==========================================
     async doLogout() {
         console.log("🔓 Fazendo logout...");
         try {
@@ -307,9 +278,6 @@ const app = {
         }
     },
 
-    // ==========================================
-    // CRIAR ADMIN MASTER
-    // ==========================================
     async criarAdminMaster() {
         console.log("👑 Criando Admin Master...");
         try {
@@ -350,9 +318,6 @@ const app = {
         }
     },
 
-    // ==========================================
-    // SHOW LOGIN / SHOW APP
-    // ==========================================
     showLogin() {
         document.getElementById('login-screen').classList.add('active');
         document.getElementById('app-container').style.display = 'none';
@@ -376,7 +341,7 @@ const app = {
     },
 
     // ==========================================
-    // DEMAIS MÉTODOS AUXILIARES
+    // MÉTODOS AUXILIARES
     // ==========================================
     initColunasVisiveis() {
         const saved = localStorage.getItem('colunas_visiveis');
@@ -582,30 +547,40 @@ const app = {
     // DASHBOARD
     // ==========================================
     async initDashboard() {
+        console.log("📊 Inicializando Dashboard...");
         this._dashCoordFilter = 'TODAS';
 
-        let query = db.collection('demandas');
-        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
-            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-        }
-        const snap = await query.get();
-        this._todasDemandasDash = snap.docs.map(d => d.data());
+        try {
+            let query = db.collection('demandas');
+            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
+                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+            }
+            const snap = await query.get();
+            this._todasDemandasDash = snap.docs.map(d => d.data());
 
-        this._renderDashboard();
+            this._renderDashboard();
 
-        document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this._dashCoordFilter = btn.getAttribute('data-coord');
-                this._renderDashboard();
+            // Filtro de Coordenação
+            document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this._dashCoordFilter = btn.getAttribute('data-coord');
+                    this._renderDashboard();
+                });
             });
-        });
 
-        document.getElementById('barChartSelector').addEventListener('change', (e) => {
-            this._activeBarChart = e.target.value;
-            this._renderBarChart();
-        });
+            // Seletor do gráfico de barras
+            const barSelector = document.getElementById('barChartSelector');
+            if (barSelector) {
+                barSelector.addEventListener('change', (e) => {
+                    this._activeBarChart = e.target.value;
+                    this._renderBarChart();
+                });
+            }
+        } catch (error) {
+            console.error("❌ Erro ao carregar dashboard:", error);
+        }
     },
 
     _getDashDemandas() {
@@ -615,6 +590,7 @@ const app = {
     },
 
     _renderDashboard() {
+        console.log("📊 Renderizando Dashboard...");
         const demandas = this._getDashDemandas();
 
         let finalizadas = 0, andamento = 0, arquivadas = 0, aguardando = 0, aguardandoSede = 0;
@@ -637,25 +613,31 @@ const app = {
             setorCount[d.setor_nome] = (setorCount[d.setor_nome] || 0) + 1;
         });
 
-        document.getElementById('kpi-total').innerText = demandas.length;
-        document.getElementById('kpi-finalizadas').innerText = finalizadas;
-        document.getElementById('kpi-andamento').innerText = andamento;
-        document.getElementById('kpi-arquivadas').innerText = arquivadas;
-        const kpiAg = document.getElementById('kpi-aguardando');
-        const kpiAgSede = document.getElementById('kpi-aguardando-sede');
-        if (kpiAg) kpiAg.innerText = aguardando;
-        if (kpiAgSede) kpiAgSede.innerText = aguardandoSede;
+        const kpis = {
+            'kpi-total': demandas.length,
+            'kpi-finalizadas': finalizadas,
+            'kpi-andamento': andamento,
+            'kpi-arquivadas': arquivadas,
+            'kpi-aguardando': aguardando,
+            'kpi-aguardando-sede': aguardandoSede
+        };
+
+        Object.keys(kpis).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = kpis[id];
+        });
 
         this._dashChartData = {
-            status:     Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
-            tipo:       Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),
-            responsavel:Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),
-            escola:     Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
-            setor:      Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]}))
+            status: Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
+            tipo: Object.keys(tipoCount).map(k => ({label: k || 'S/N', value: tipoCount[k]})),
+            responsavel: Object.keys(respCount).map(k => ({label: k || 'S/N', value: respCount[k]})),
+            escola: Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
+            setor: Object.keys(setorCount).map(k => ({label: k || 'S/N', value: setorCount[k]}))
         };
 
         this._renderStatusChart();
         this._renderBarChart();
+        console.log("✅ Dashboard renderizada com sucesso!");
     },
 
     _renderStatusChart() {
@@ -669,12 +651,12 @@ const app = {
         const data = (this._dashChartData || {})[key] || [];
 
         const titles = { setor: 'Por Setor', tipo: 'Por Tipo', responsavel: 'Por Responsável', escola: 'Por Escola' };
-        const icons  = { setor: 'ri-layout-grid-line', tipo: 'ri-list-check', responsavel: 'ri-user-line', escola: 'ri-building-line' };
+        const icons = { setor: 'ri-layout-grid-line', tipo: 'ri-list-check', responsavel: 'ri-user-line', escola: 'ri-building-line' };
 
         const titleEl = document.getElementById('barChartTitle');
-        const iconEl  = document.getElementById('barChartIconBadge');
+        const iconEl = document.getElementById('barChartIconBadge');
         if (titleEl) titleEl.innerText = titles[key] || key;
-        if (iconEl)  iconEl.innerHTML  = `<i class="${icons[key] || 'ri-bar-chart-horizontal-line'}"></i>`;
+        if (iconEl) iconEl.innerHTML = `<i class="${icons[key] || 'ri-bar-chart-horizontal-line'}"></i>`;
 
         this.renderHorizontalBarChart('chartBarCanvas', data);
     },
@@ -686,7 +668,7 @@ const app = {
         const ctx = canvas.getContext('2d');
         const labels = dataArr.map(d => d.label);
         const values = dataArr.map(d => d.value);
-        const total  = values.reduce((s, v) => s + v, 0);
+        const total = values.reduce((s, v) => s + v, 0);
 
         const vibrantColors = [
             '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
@@ -781,7 +763,7 @@ const app = {
         const sorted = [...dataArr].sort((a, b) => b.value - a.value);
         const labels = sorted.map(d => d.label);
         const values = sorted.map(d => d.value);
-        const total  = values.reduce((s, v) => s + v, 0);
+        const total = values.reduce((s, v) => s + v, 0);
 
         const vibrantColors = [
             '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
@@ -865,14 +847,24 @@ const app = {
     // DEMANDAS
     // ==========================================
     async initDemandas() {
+        console.log("📋 Inicializando lista de demandas...");
         await this.loadFiltrosDemandas();
         this.carregarDemandas();
         
-        document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-status').addEventListener('change', () => this.filtrarTabelaDemandas());
+        const filterSearch = document.getElementById('filter-search');
+        if (filterSearch) filterSearch.addEventListener('input', () => this.filtrarTabelaDemandas());
+        
+        const filterCoord = document.getElementById('filter-coordenadoria');
+        if (filterCoord) filterCoord.addEventListener('change', () => this.filtrarTabelaDemandas());
+        
+        const filterEscola = document.getElementById('filter-escola');
+        if (filterEscola) filterEscola.addEventListener('change', () => this.filtrarTabelaDemandas());
+        
+        const filterTipo = document.getElementById('filter-tipo');
+        if (filterTipo) filterTipo.addEventListener('change', () => this.filtrarTabelaDemandas());
+        
+        const filterStatus = document.getElementById('filter-status');
+        if (filterStatus) filterStatus.addEventListener('change', () => this.filtrarTabelaDemandas());
     },
 
     async loadFiltrosDemandas() {
@@ -905,7 +897,8 @@ const app = {
         try {
             document.body.style.cursor = 'wait';
             let query = db.collection('demandas');
-            if(document.getElementById('filter-arquivadas').getAttribute('data-active') !== 'true') {
+            const filterArquivadas = document.getElementById('filter-arquivadas');
+            if(filterArquivadas && filterArquivadas.getAttribute('data-active') !== 'true') {
                 query = query.where('arquivada', '==', false);
             } else {
                 query = query.where('arquivada', '==', true);
@@ -949,7 +942,7 @@ const app = {
     },
 
     // ==========================================
-    // RENDERIZAÇÃO DA TABELA DE DEMANDAS (CORRIGIDA)
+    // RENDERIZAÇÃO DA TABELA DE DEMANDAS
     // ==========================================
     renderTabelaDemandas(demandas) {
         const theadTr = document.getElementById('demandas-thead-tr');
@@ -985,9 +978,6 @@ const app = {
                     }
                 });
 
-                // ==========================================
-                // BOTÕES DE AÇÃO CORRIGIDOS
-                // ==========================================
                 tdHtml += `
                 <td>
                     <button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>
@@ -1099,10 +1089,9 @@ const app = {
     },
 
     // ==========================================
-    // FUNÇÕES CORRIGIDAS PARA BOTÕES DE AÇÃO
+    // FUNÇÕES PARA BOTÕES DE AÇÃO
     // ==========================================
 
-    // Editar Demanda (abre modal com dados)
     async abrirModalDemandaEditar(id) {
         console.log("✏️ Editando demanda:", id);
         try {
@@ -1120,7 +1109,6 @@ const app = {
         }
     },
 
-    // Excluir Demanda (com confirmação)
     async confirmarExcluirDemanda(id) {
         console.log("🗑️ Solicitando exclusão da demanda:", id);
         const confirmado = await this.showConfirm(
@@ -1134,7 +1122,6 @@ const app = {
         }
     },
 
-    // Arquivar Demanda (com confirmação)
     async confirmarArquivarDemanda(id) {
         console.log("📦 Solicitando arquivamento da demanda:", id);
         const confirmado = await this.showConfirm(
@@ -1148,7 +1135,6 @@ const app = {
         }
     },
 
-    // Desarquivar Demanda (com confirmação)
     async confirmarDesarquivarDemanda(id) {
         console.log("📤 Solicitando desarquivamento da demanda:", id);
         const confirmado = await this.showConfirm(
@@ -1162,7 +1148,6 @@ const app = {
         }
     },
 
-    // Método de exclusão definitiva
     async excluirDemanda(id) {
         console.log("🗑️ Excluindo demanda definitivamente:", id);
         try {
@@ -1181,7 +1166,6 @@ const app = {
         }
     },
 
-    // Arquivar Demanda
     async arquivarDemanda(id) {
         console.log("📦 Arquivando demanda:", id);
         try {
@@ -1194,7 +1178,6 @@ const app = {
         }
     },
 
-    // Desarquivar Demanda
     async desarquivarDemanda(id) {
         console.log("📤 Desarquivando demanda:", id);
         try {
@@ -1228,29 +1211,31 @@ const app = {
     },
 
     // ==========================================
-    // DETALHES DA DEMANDA
+    // DETALHES DA DEMANDA COM AÇÕES CORRIGIDAS
     // ==========================================
     async abrirDetalhesDemanda(id) {
+        console.log("📄 Abrindo detalhes da demanda:", id);
         document.body.style.cursor = 'wait';
         try {
             const doc = await db.collection('demandas').doc(id).get();
-            if(!doc.exists) return;
+            if(!doc.exists) {
+                await this.showAlert("Demanda não encontrada.");
+                document.body.style.cursor = 'default';
+                return;
+            }
             const d = doc.data();
             this.demandaAbertaId = id;
 
-            document.getElementById('contentArea').innerHTML = document.getElementById('view-demanda-detalhe').innerHTML;
+            // Carrega o template
+            const template = document.getElementById('view-demanda-detalhe');
+            if (!template) {
+                console.error("❌ Template 'view-demanda-detalhe' não encontrado!");
+                document.body.style.cursor = 'default';
+                return;
+            }
+            document.getElementById('contentArea').innerHTML = template.innerHTML;
 
-            const actionsDiv = document.getElementById('detalhe-actions');
-            actionsDiv.innerHTML = `
-                <button class="btn btn-secondary" onclick="app.abrirModalDemandaEditar('${id}')"><i class="ri-edit-line"></i> Editar</button>
-                ${d.arquivada 
-                    ? `<button class="btn btn-secondary" onclick="app.confirmarDesarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
-                    : `<button class="btn btn-secondary" onclick="app.confirmarArquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
-                }
-                <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
-                <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
-            `;
-
+            // Preenche os dados
             document.getElementById('detalhe-numero').innerText = `Nº ${d.numero_registro || '-'}`;
             document.getElementById('detalhe-status').innerText = d.status_nome || 'SEM STATUS';
             document.getElementById('detalhe-status').className = 'badge badge-' + this.getBadgeColor(d.status_nome);
@@ -1263,17 +1248,92 @@ const app = {
             document.getElementById('detalhe-escola').innerText = d.escola_nome || '-';
             document.getElementById('detalhe-responsavel').innerText = d.funcionario_nome || '-';
 
-            const funcSnap = await db.collection('funcionarios').get();
-            const statSnap = await db.collection('status_atendimento').get();
-            const selResp = document.getElementById('detalhe-acao-responsavel');
-            const selStat = document.getElementById('detalhe-acao-status');
-            
-            selResp.innerHTML = '<option value="">Selecione</option>' + funcSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
-            selStat.innerHTML = '<option value="">Selecione o status</option>' + statSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
-            document.getElementById('detalhe-acao-data').value = new Date().toISOString().split('T')[0];
+            // ==========================================
+            // BOTÕES DE AÇÃO DA DEMANDA
+            // ==========================================
+            const actionsDiv = document.getElementById('detalhe-actions');
+            if (actionsDiv) {
+                actionsDiv.innerHTML = `
+                    <button class="btn btn-secondary" onclick="app.abrirModalDemandaEditar('${id}')"><i class="ri-edit-line"></i> Editar</button>
+                    ${d.arquivada 
+                        ? `<button class="btn btn-secondary" onclick="app.confirmarDesarquivarDemanda('${id}'); setTimeout(() => app.abrirDetalhesDemanda('${id}'), 300);"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
+                        : `<button class="btn btn-secondary" onclick="app.confirmarArquivarDemanda('${id}'); setTimeout(() => app.abrirDetalhesDemanda('${id}'), 300);"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
+                    }
+                    <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
+                    <button class="btn btn-danger" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
+                `;
+            }
+
+            // Carrega os selects do form de ação
+            try {
+                const funcSnap = await db.collection('funcionarios').get();
+                const statSnap = await db.collection('status_atendimento').get();
+                const selResp = document.getElementById('detalhe-acao-responsavel');
+                const selStat = document.getElementById('detalhe-acao-status');
+                
+                if (selResp) {
+                    selResp.innerHTML = '<option value="">Selecione</option>' + 
+                        funcSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+                }
+                if (selStat) {
+                    selStat.innerHTML = '<option value="">Selecione o status</option>' + 
+                        statSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+                }
+                
+                const dataInput = document.getElementById('detalhe-acao-data');
+                if (dataInput) {
+                    dataInput.value = new Date().toISOString().split('T')[0];
+                }
+            } catch (error) {
+                console.error("❌ Erro ao carregar selects:", error);
+            }
+
+            // ==========================================
+            // BOTÃO DE NOVA AÇÃO
+            // ==========================================
+            const novaAcaoBtn = document.querySelector('.acoes-header .btn-primary');
+            if (novaAcaoBtn) {
+                novaAcaoBtn.onclick = () => {
+                    console.log("🖱️ Botão 'Nova Ação' clicado!");
+                    document.getElementById('detalhe-acao-form-container').style.display = 'block';
+                    document.getElementById('detalhe-acao-id').value = '';
+                    document.getElementById('detalhe-acao-descricao').value = '';
+                    
+                    // Rola para o formulário
+                    const formContainer = document.getElementById('detalhe-acao-form-container');
+                    if (formContainer) formContainer.scrollIntoView({ behavior: 'smooth' });
+                };
+            }
+
+            // ==========================================
+            // FORMULÁRIO DE AÇÃO - SUBMIT
+            // ==========================================
+            const acaoForm = document.getElementById('detalhe-acao-form');
+            if (acaoForm) {
+                acaoForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    console.log("🖱️ Formulário de ação submetido!");
+                    this.salvarAcaoDetalhe();
+                };
+            }
+
+            // ==========================================
+            // BOTÃO CANCELAR DO FORM
+            // ==========================================
+            const cancelBtn = document.querySelector('.acoes-form-actions .btn-secondary');
+            if (cancelBtn) {
+                cancelBtn.onclick = () => {
+                    console.log("🖱️ Botão 'Cancelar' do formulário clicado!");
+                    document.getElementById('detalhe-acao-form-container').style.display = 'none';
+                };
+            }
 
             await this.carregarAcoesDetalhe(id);
-        } catch(e) { console.error(e); }
+            console.log("✅ Detalhes da demanda carregados com sucesso!");
+        } catch(e) { 
+            console.error("❌ Erro ao abrir detalhes:", e);
+            await this.showAlert("Erro ao carregar detalhes: " + e.message);
+        }
         document.body.style.cursor = 'default';
     },
 
@@ -1281,108 +1341,138 @@ const app = {
         this.loadView('demandas');
     },
 
-    async abrirFormNovaAcao() {
-        document.getElementById('detalhe-acao-form-container').style.display = 'block';
-        document.getElementById('detalhe-acao-id').value = '';
-        document.getElementById('detalhe-acao-descricao').value = '';
-    },
-    
-    fecharFormNovaAcao() {
-        document.getElementById('detalhe-acao-form-container').style.display = 'none';
-    },
-
+    // ==========================================
+    // AÇÕES DA DEMANDA (CRUD)
+    // ==========================================
     async carregarAcoesDetalhe(id) {
-        const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
-        let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        acoes.sort((a, b) => {
-            const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
-            if(timeDiff !== 0) return timeDiff;
-            return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
-        });
-
-        const tbody = document.getElementById('detalhe-acoes-tbody');
-        if(!tbody) return;
-
-        if(acoes.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma ação registrada.</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = acoes.map(a => `
-            <tr>
-                <td>${this.formatarDataBR(a.data_acao)}</td>
-                <td>${a.descricao}</td>
-                <td>${a.funcionario_nome || '-'}</td>
-                <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
-    async editarAcaoDetalhe(idAcao) {
+        console.log("📋 Carregando ações para demanda:", id);
         try {
-            const doc = await db.collection('acoes').doc(idAcao).get();
-            if(!doc.exists) return;
-            const a = doc.data();
+            const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
+            let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            acoes.sort((a, b) => {
+                const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+                if(timeDiff !== 0) return timeDiff;
+                return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+            });
 
-            this.abrirFormNovaAcao();
-            document.getElementById('detalhe-acao-id').value = idAcao;
-            document.getElementById('detalhe-acao-data').value = a.data_acao;
-            document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
-            document.getElementById('detalhe-acao-descricao').value = a.descricao || '';
-            document.getElementById('detalhe-acao-status').value = a.status_nome || '';
-            
-            document.getElementById('detalhe-acao-form-container').scrollIntoView({ behavior: 'smooth' });
-        } catch(e) {
-            console.error(e);
+            const tbody = document.getElementById('detalhe-acoes-tbody');
+            if(!tbody) return;
+
+            if(acoes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Nenhuma ação registrada.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = acoes.map(a => `
+                <tr>
+                    <td>${this.formatarDataBR(a.data_acao)}</td>
+                    <td style="white-space: normal; word-wrap: break-word; max-width: 300px;">${a.descricao || '-'}</td>
+                    <td>${a.funcionario_nome || '-'}</td>
+                    <td>${a.status_nome ? `<span class="badge" style="background:var(--primary-color); color:white;">${a.status_nome}</span>` : '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="app.confirmarExcluirAcaoDetalhe('${a.id}')" title="Excluir Ação"><i class="ri-delete-bin-line"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (error) {
+            console.error("❌ Erro ao carregar ações:", error);
         }
     },
 
     async salvarAcaoDetalhe() {
+        console.log("💾 Salvando ação...");
         const idAcao = document.getElementById('detalhe-acao-id').value;
         const dataAcao = document.getElementById('detalhe-acao-data').value;
         const resp = document.getElementById('detalhe-acao-responsavel').value;
         const desc = document.getElementById('detalhe-acao-descricao').value;
         const status = document.getElementById('detalhe-acao-status').value;
         
-        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Salvando...';
+        if (!dataAcao || !desc) {
+            await this.showAlert("Preencha todos os campos obrigatórios.");
+            return;
+        }
+
+        const btn = document.getElementById('btn-salvar-acao-detalhe');
+        if (btn) btn.innerText = 'Salvando...';
 
         try {
             const acaoData = {
                 demanda_id: this.demandaAbertaId,
                 data_acao: dataAcao,
                 criado_em: new Date().toISOString(),
-                funcionario_nome: resp,
+                funcionario_nome: resp || '-',
                 descricao: desc,
-                status_nome: status
+                status_nome: status || '-'
             };
 
             if(idAcao) {
                 await db.collection('acoes').doc(idAcao).update(acaoData);
+                console.log("✅ Ação atualizada!");
             } else {
                 await db.collection('acoes').add(acaoData);
+                console.log("✅ Ação criada!");
             }
 
             if(status) {
                 await db.collection('demandas').doc(this.demandaAbertaId).update({ status_nome: status });
+                console.log("✅ Status da demanda atualizado para:", status);
             }
 
-            this.fecharFormNovaAcao();
-            await this.abrirDetalhesDemanda(this.demandaAbertaId);
+            document.getElementById('detalhe-acao-form-container').style.display = 'none';
+            await this.carregarAcoesDetalhe(this.demandaAbertaId);
+            await this.showAlert("Ação registrada com sucesso!");
         } catch(e) {
-            console.error(e);
-            await this.showAlert("Erro ao salvar ação");
+            console.error("❌ Erro ao salvar ação:", e);
+            await this.showAlert("Erro ao salvar ação: " + e.message);
         }
-        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Registrar Ação';
+        
+        if (btn) btn.innerText = 'Registrar Ação';
     },
 
-    async excluirAcaoDetalhe(idAcao) {
-        if(await this.showConfirm("Excluir esta ação?", "Excluir", "Cancelar")) {
-            await db.collection('acoes').doc(idAcao).delete();
-            await this.carregarAcoesDetalhe(this.demandaAbertaId);
+    async editarAcaoDetalhe(idAcao) {
+        console.log("✏️ Editando ação:", idAcao);
+        try {
+            const doc = await db.collection('acoes').doc(idAcao).get();
+            if(!doc.exists) {
+                await this.showAlert("Ação não encontrada.");
+                return;
+            }
+            const a = doc.data();
+
+            document.getElementById('detalhe-acao-form-container').style.display = 'block';
+            document.getElementById('detalhe-acao-id').value = idAcao;
+            document.getElementById('detalhe-acao-data').value = a.data_acao || '';
+            document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
+            document.getElementById('detalhe-acao-descricao').value = a.descricao || '';
+            document.getElementById('detalhe-acao-status').value = a.status_nome || '';
+            
+            const formContainer = document.getElementById('detalhe-acao-form-container');
+            if (formContainer) formContainer.scrollIntoView({ behavior: 'smooth' });
+        } catch(e) {
+            console.error("❌ Erro ao editar ação:", e);
+            await this.showAlert("Erro ao carregar ação para edição.");
+        }
+    },
+
+    async confirmarExcluirAcaoDetalhe(idAcao) {
+        console.log("🗑️ Solicitando exclusão da ação:", idAcao);
+        const confirmado = await this.showConfirm(
+            "Tem certeza que deseja excluir esta ação?",
+            "Excluir",
+            "Cancelar",
+            true
+        );
+        if (confirmado) {
+            try {
+                await db.collection('acoes').doc(idAcao).delete();
+                console.log("✅ Ação excluída!");
+                await this.carregarAcoesDetalhe(this.demandaAbertaId);
+                await this.showAlert("Ação excluída com sucesso!");
+            } catch (error) {
+                console.error("❌ Erro ao excluir ação:", error);
+                await this.showAlert("Erro ao excluir ação.");
+            }
         }
     },
 
@@ -1390,114 +1480,133 @@ const app = {
     // MODAL DE DEMANDA (CRIAR/EDITAR)
     // ==========================================
     async openModalDemanda(d = null) {
-        const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
-        const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
-        const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
-        const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
-        const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
-        const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
-        const setores = (await db.collection('setores').get()).docs.map(d => d.data());
+        console.log("📝 Abrindo modal de demanda:", d ? 'Editar' : 'Nova');
+        try {
+            const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
+            const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
+            const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
+            const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
+            const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
+            const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
+            const setores = (await db.collection('setores').get()).docs.map(d => d.data());
 
-        const html = `
-            <form id="demandaForm">
-                ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
-                <div class="form-group">
-                    <label>Descrição</label>
-                    <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+            const html = `
+                <form id="demandaForm">
+                    ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
                     <div class="form-group">
-                        <label>Demandante</label>
-                        <select class="form-control" name="demandante_nome" required>
-                            <option value="">Selecione...</option>
-                            ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
+                        <label>Descrição *</label>
+                        <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
                     </div>
-                    <div class="form-group">
-                        <label>Coordenação</label>
-                        <select class="form-control" name="coordenadoria_nome" required>
-                            <option value="">Selecione...</option>
-                            ${coord.map(x => `<option value="${x.nome}" ${d && d.coordenadoria_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label>Demandante *</label>
+                            <select class="form-control" name="demandante_nome" required>
+                                <option value="">Selecione...</option>
+                                ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Coordenação *</label>
+                            <select class="form-control" name="coordenadoria_nome" required>
+                                <option value="">Selecione...</option>
+                                ${coord.map(x => `<option value="${x.nome}" ${d && d.coordenadoria_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Escola</label>
+                            <select class="form-control" name="escola_nome">
+                                <option value="">Selecione...</option>
+                                ${escolas.map(x => `<option value="${x.nome}" ${d && d.escola_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo</label>
+                            <select class="form-control" name="tipo_nome">
+                                <option value="">Selecione...</option>
+                                ${tipos.map(x => `<option value="${x.nome}" ${d && d.tipo_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Status Inicial</label>
+                            <select class="form-control" name="status_nome">
+                                <option value="">Selecione...</option>
+                                ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Setor</label>
+                            <select class="form-control" name="setor_nome">
+                                <option value="">Selecione...</option>
+                                ${setores.map(x => `<option value="${x.nome}" ${d && d.setor_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Responsável</label>
+                            <select class="form-control" name="funcionario_nome">
+                                <option value="">Selecione...</option>
+                                ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
+                                <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
+                                    ${d && d.processo_siged && d.processo_siged !== '-' ? 'checked' : ''}
+                                    onchange="document.getElementById('siged-box').style.display = this.checked ? 'block' : 'none'"
+                                    style="width:18px; height:18px; cursor:pointer;">
+                                Esta demanda possui número de processo SIGED
+                            </label>
+                        </div>
+                        <div class="form-group" id="siged-box" style="grid-column: 1 / -1; display: ${d && d.processo_siged && d.processo_siged !== '-' ? 'block' : 'none'}; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 15px;">
+                            <label style="font-weight:600; color:#1d4ed8;"><i class="ri-file-text-line"></i> Número do Processo SIGED</label>
+                            <input class="form-control" name="processo_siged" id="campo-siged"
+                                value="${d ? (d.processo_siged||'') : ''}"
+                                placeholder="Ex: 01600.016741/2024-30"
+                                style="margin-top:8px;">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Escola</label>
-                        <select class="form-control" name="escola_nome">
-                            <option value="">Selecione...</option>
-                            ${escolas.map(x => `<option value="${x.nome}" ${d && d.escola_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo</label>
-                        <select class="form-control" name="tipo_nome">
-                            <option value="">Selecione...</option>
-                            ${tipos.map(x => `<option value="${x.nome}" ${d && d.tipo_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Status Inicial</label>
-                        <select class="form-control" name="status_nome">
-                            <option value="">Selecione...</option>
-                            ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Setor</label>
-                        <select class="form-control" name="setor_nome">
-                            <option value="">Selecione...</option>
-                            ${setores.map(x => `<option value="${x.nome}" ${d && d.setor_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Responsável</label>
-                        <select class="form-control" name="funcionario_nome">
-                            <option value="">Selecione...</option>
-                            ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
-                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
-                            <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
-                                ${d && d.processo_siged && d.processo_siged !== '-' ? 'checked' : ''}
-                                onchange="document.getElementById('siged-box').style.display = this.checked ? 'block' : 'none'"
-                                style="width:18px; height:18px; cursor:pointer;">
-                            Esta demanda possui número de processo SIGED
-                        </label>
-                    </div>
-                    <div class="form-group" id="siged-box" style="grid-column: 1 / -1; display: ${d && d.processo_siged && d.processo_siged !== '-' ? 'block' : 'none'}; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 15px;">
-                        <label style="font-weight:600; color:#1d4ed8;"><i class="ri-file-text-line"></i> Número do Processo SIGED</label>
-                        <input class="form-control" name="processo_siged" id="campo-siged"
-                            value="${d ? (d.processo_siged||'') : ''}"
-                            placeholder="Ex: 01600.016741/2024-30"
-                            style="margin-top:8px;">
-                    </div>
-                </div>
-            </form>
-        `;
+                </form>
+            `;
 
-        this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
-            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
-        ]);
+            this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
+                { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() },
+                { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
+            ]);
+        } catch (error) {
+            console.error("❌ Erro ao abrir modal:", error);
+            await this.showAlert("Erro ao carregar dados: " + error.message);
+        }
     },
 
     async salvarDemanda(isEdit) {
+        console.log("💾 Salvando demanda...");
         const form = document.getElementById('demandaForm');
-        if(!form.checkValidity()) return form.reportValidity();
+        if(!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
         const data = Object.fromEntries(new FormData(form));
         
-        if (isEdit) {
-            const id = data.id;
-            delete data.id;
-            await db.collection('demandas').doc(id).update(data);
-        } else {
-            data.arquivada = false;
-            data.data_registro = new Date().toISOString().split('T')[0];
-            data.numero_registro = await this.gerarNumeroDemanda();
-            await db.collection('demandas').add(data);
-        }
+        try {
+            if (isEdit) {
+                const id = data.id;
+                delete data.id;
+                await db.collection('demandas').doc(id).update(data);
+                console.log("✅ Demanda atualizada!");
+            } else {
+                data.arquivada = false;
+                data.data_registro = new Date().toISOString().split('T')[0];
+                data.numero_registro = await this.gerarNumeroDemanda();
+                await db.collection('demandas').add(data);
+                console.log("✅ Demanda criada!");
+            }
 
-        this.closeModal();
-        this.carregarDemandas();
+            this.closeModal();
+            this.carregarDemandas();
+            await this.showAlert(isEdit ? "Demanda atualizada com sucesso!" : "Demanda criada com sucesso!");
+        } catch (error) {
+            console.error("❌ Erro ao salvar demanda:", error);
+            await this.showAlert("Erro ao salvar demanda: " + error.message);
+        }
     },
 
     async gerarNumeroDemanda() {
@@ -1573,10 +1682,15 @@ const app = {
     },
 
     async gerarPdfDemandaNovaGuia(id) {
+        console.log("📄 Gerando PDF da demanda:", id);
         document.body.style.cursor = 'wait';
         try {
             const doc = await db.collection('demandas').doc(id).get();
-            if(!doc.exists) return;
+            if(!doc.exists) {
+                await this.showAlert("Demanda não encontrada.");
+                document.body.style.cursor = 'default';
+                return;
+            }
             const d = doc.data();
 
             const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
@@ -1586,6 +1700,17 @@ const app = {
                 if(timeDiff !== 0) return timeDiff;
                 return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
             });
+
+            // Verifica se a biblioteca html2pdf está disponível
+            if (typeof html2pdf === 'undefined') {
+                console.warn("⚠️ html2pdf não carregado, tentando carregar...");
+                await new Promise((resolve) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                    script.onload = resolve;
+                    document.head.appendChild(script);
+                });
+            }
 
             let html = `
                 <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
@@ -1627,7 +1752,7 @@ const app = {
                         </thead>
                     </table>
                     ${acoes.length
-                        ? acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td></tr></tbody></table>`).join('')
+                        ? acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td></tr></tbody></table>`).join('')
                         : `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td colspan="3" style="padding:8px; border:1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr></tbody></table>`
                     }
                 </div>
@@ -1651,9 +1776,10 @@ const app = {
             const pdfBlobUrl = await html2pdf().from(tempDiv.firstElementChild).set(opt).output('bloburl');
             window.open(pdfBlobUrl, '_blank');
             document.body.removeChild(tempDiv);
+            console.log("✅ PDF gerado com sucesso!");
         } catch (e) {
-            console.error("Erro ao gerar PDF:", e);
-            await this.showAlert("Erro ao gerar PDF.");
+            console.error("❌ Erro ao gerar PDF:", e);
+            await this.showAlert("Erro ao gerar PDF: " + e.message);
         }
         document.body.style.cursor = 'default';
     },
@@ -1761,94 +1887,107 @@ const app = {
     // KANBAN
     // ==========================================
     async initKanban() {
+        console.log("📊 Inicializando Kanban...");
         const board = document.getElementById('kanbanBoard');
         board.innerHTML = '';
         this.kanbanSortables.forEach(s => s.destroy());
         this.kanbanSortables = [];
 
-        const statusSnap = await db.collection('status_atendimento').get();
-        const statusList = statusSnap.docs.map(d => d.data());
+        try {
+            const statusSnap = await db.collection('status_atendimento').get();
+            const statusList = statusSnap.docs.map(d => d.data());
 
-        let query = db.collection('demandas').where('arquivada', '==', false);
-        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
-            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-        }
-        const demSnap = await query.get();
-        const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
+            let query = db.collection('demandas').where('arquivada', '==', false);
+            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
+                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+            }
+            const demSnap = await query.get();
+            const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
 
-        statusList.forEach(s => {
-            const colDemandas = demandas.filter(d => d.status_nome == s.nome);
-            const col = document.createElement('div');
-            col.className = 'kanban-column';
-            col.innerHTML = `
-                <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
-                <div class="kanban-items" data-status="${s.nome}">
-                    ${colDemandas.map(d => {
-                        const coordColor = this.getColorForText(d.coordenadoria_nome);
-                        const tipoColor = this.getColorForText(d.tipo_nome);
-                        return `
-                        <div class="kanban-card" data-id="${d.id}" style="border-left: 4px solid var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color));">
-                            <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
-                            <div class="kanban-card-meta">
-                                <span class="badge" style="background:${coordColor.bg}; color:${coordColor.color};">${d.coordenadoria_nome || '-'}</span> 
-                                <span class="badge" style="background:${tipoColor.bg}; color:${tipoColor.color};">${d.tipo_nome || '-'}</span>
+            statusList.forEach(s => {
+                const colDemandas = demandas.filter(d => d.status_nome == s.nome);
+                const col = document.createElement('div');
+                col.className = 'kanban-column';
+                col.innerHTML = `
+                    <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
+                    <div class="kanban-items" data-status="${s.nome}">
+                        ${colDemandas.map(d => {
+                            const coordColor = this.getColorForText(d.coordenadoria_nome);
+                            const tipoColor = this.getColorForText(d.tipo_nome);
+                            return `
+                            <div class="kanban-card" data-id="${d.id}" style="border-left: 4px solid var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color));">
+                                <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
+                                <div class="kanban-card-meta">
+                                    <span class="badge" style="background:${coordColor.bg}; color:${coordColor.color};">${d.coordenadoria_nome || '-'}</span> 
+                                    <span class="badge" style="background:${tipoColor.bg}; color:${tipoColor.color};">${d.tipo_nome || '-'}</span>
+                                </div>
                             </div>
-                        </div>
-                        `}).join('')}
-                </div>
-            `;
-            board.appendChild(col);
-        });
+                            `}).join('')}
+                    </div>
+                `;
+                board.appendChild(col);
+            });
 
-        document.querySelectorAll('.kanban-items').forEach(el => {
-            this.kanbanSortables.push(new Sortable(el, {
-                group: 'kanban',
-                animation: 150,
-                onEnd: async (evt) => {
-                    const itemEl = evt.item;
-                    const toList = evt.to;
-                    const newStatus = toList.getAttribute('data-status');
-                    const demandaId = itemEl.getAttribute('data-id');
-                    
-                    await db.collection('demandas').doc(demandaId).update({ status_nome: newStatus });
-                    this.initKanban();
-                }
-            }));
-        });
+            document.querySelectorAll('.kanban-items').forEach(el => {
+                this.kanbanSortables.push(new Sortable(el, {
+                    group: 'kanban',
+                    animation: 150,
+                    onEnd: async (evt) => {
+                        const itemEl = evt.item;
+                        const toList = evt.to;
+                        const newStatus = toList.getAttribute('data-status');
+                        const demandaId = itemEl.getAttribute('data-id');
+                        
+                        await db.collection('demandas').doc(demandaId).update({ status_nome: newStatus });
+                        this.initKanban();
+                    }
+                }));
+            });
+            console.log("✅ Kanban inicializado com sucesso!");
+        } catch (error) {
+            console.error("❌ Erro ao iniciar Kanban:", error);
+        }
     },
 
     // ==========================================
     // CALENDÁRIO
     // ==========================================
     async initCalendario() {
-        const container = document.getElementById('calendar-container');
-        let query = db.collection('demandas').where('arquivada', '==', false);
-        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
-            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-        }
-        const snap = await query.get();
-        const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        
-        const events = demandas.filter(d => d.data_registro).map(d => ({
-            title: `#${d.numero_registro} ${d.escola_nome}`,
-            start: d.data_registro,
-            url: `javascript:app.abrirDetalhesDemanda('${d.id}')`,
-            backgroundColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`,
-            borderColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`
-        }));
+        console.log("📅 Inicializando Calendário...");
+        try {
+            const container = document.getElementById('calendar-container');
+            let query = db.collection('demandas').where('arquivada', '==', false);
+            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+            }
+            const snap = await query.get();
+            const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const events = demandas.filter(d => d.data_registro).map(d => ({
+                title: `#${d.numero_registro} ${d.escola_nome}`,
+                start: d.data_registro,
+                url: `javascript:app.abrirDetalhesDemanda('${d.id}')`,
+                backgroundColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`,
+                borderColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`
+            }));
 
-        this.calendar = new FullCalendar.Calendar(container, {
-            initialView: 'dayGridMonth',
-            locale: 'pt-br',
-            events: events
-        });
-        this.calendar.render();
+            this.calendar = new FullCalendar.Calendar(container, {
+                initialView: 'dayGridMonth',
+                locale: 'pt-br',
+                events: events
+            });
+            this.calendar.render();
+            console.log("✅ Calendário inicializado com sucesso!");
+        } catch (error) {
+            console.error("❌ Erro ao iniciar Calendário:", error);
+        }
     },
 
     // ==========================================
     // CADASTROS
     // ==========================================
     async initCadastros() {
+        console.log("📋 Inicializando Cadastros...");
         const tabs = document.querySelectorAll('#cadastros-tabs li');
         tabs.forEach(t => t.addEventListener('click', (e) => {
             tabs.forEach(li => li.classList.remove('active'));
@@ -1860,29 +1999,33 @@ const app = {
 
     async loadCadastroTable(tabela) {
         window.currentCadastroTable = tabela;
-        const snap = await db.collection(tabela).get();
-        const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        
-        const thead = document.getElementById('cadastro-thead');
-        const tbody = document.getElementById('cadastro-tbody');
-        thead.innerHTML = ''; tbody.innerHTML = '';
-        
-        if(data.length === 0) {
-            tbody.innerHTML = '<tr><td>Nenhum registro encontrado.</td></tr>';
-            return;
+        try {
+            const snap = await db.collection(tabela).get();
+            const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const thead = document.getElementById('cadastro-thead');
+            const tbody = document.getElementById('cadastro-tbody');
+            thead.innerHTML = ''; tbody.innerHTML = '';
+            
+            if(data.length === 0) {
+                tbody.innerHTML = '<tr><td style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                return;
+            }
+
+            const keys = Object.keys(data[0]).filter(k => k !== 'id');
+            let ths = keys.map(k => `<th>${k}</th>`).join('');
+            thead.innerHTML = `<tr>${ths}<th>Ações</th></tr>`;
+
+            data.forEach(row => {
+                let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
+                tbody.innerHTML += `<tr>${tds}<td>
+                    <button class="btn btn-sm btn-secondary" onclick='app.editarCadastro(${JSON.stringify(row)})'><i class="ri-edit-line"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
+                </td></tr>`;
+            });
+        } catch (error) {
+            console.error("❌ Erro ao carregar cadastro:", error);
         }
-
-        const keys = Object.keys(data[0]).filter(k => k !== 'id');
-        let ths = keys.map(k => `<th>${k}</th>`).join('');
-        thead.innerHTML = `<tr>${ths}<th>Ações</th></tr>`;
-
-        data.forEach(row => {
-            let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
-            tbody.innerHTML += `<tr>${tds}<td>
-                <button class="btn btn-sm btn-secondary" onclick='app.editarCadastro(${JSON.stringify(row)})'><i class="ri-edit-line"></i></button>
-                <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
-            </td></tr>`;
-        });
     },
 
     editarCadastro(row) {
@@ -1947,44 +2090,49 @@ const app = {
     // USUARIOS
     // ==========================================
     async initUsuarios() {
+        console.log("👥 Inicializando Usuários...");
         const tbody = document.getElementById('usuarios-tbody');
         tbody.innerHTML = '';
-        const snap = await db.collection('usuarios').get();
-        const usuarios = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        
-        usuarios.forEach(u => {
-            const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
-            const btnReset = (u.login === 'admin' || u.metodo_login === 'google') ? '' : `<button class="btn btn-sm btn-warning" onclick="app.resetarSenhaUsuario('${u.email}', '${u.id}')" title="Enviar link de reset e forçar troca de senha"><i class="ri-mail-send-line"></i></button>`;
+        try {
+            const snap = await db.collection('usuarios').get();
+            const usuarios = snap.docs.map(d => ({id: d.id, ...d.data()}));
             
-            let badges = '';
-            if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
-            else {
-                if(u.coordenadoria_nome) badges += `<span class="badge" style="background:#e0e7ff; color:#3730a3; margin-bottom: 5px;">${u.coordenadoria_nome}</span><br>`;
-                const p = u.permissoes || {};
-                const checkPerm = (val, label) => val ? `<span class="badge" style="background:#e2e8f0; color:#333; margin-top:2px;">${label}</span> ` : '';
+            usuarios.forEach(u => {
+                const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
+                const btnReset = (u.login === 'admin' || u.metodo_login === 'google') ? '' : `<button class="btn btn-sm btn-warning" onclick="app.resetarSenhaUsuario('${u.email}', '${u.id}')" title="Enviar link de reset e forçar troca de senha"><i class="ri-mail-send-line"></i></button>`;
                 
-                badges += checkPerm(p.criar_demandas, 'Criar Dem');
-                badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
-                badges += checkPerm(p.editar_demandas, 'Edit Dem');
-                badges += checkPerm(p.excluir_demandas, 'Exc Dem');
-                badges += checkPerm(p.criar_acoes, 'Criar Ação');
-                badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
-            }
+                let badges = '';
+                if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
+                else {
+                    if(u.coordenadoria_nome) badges += `<span class="badge" style="background:#e0e7ff; color:#3730a3; margin-bottom: 5px;">${u.coordenadoria_nome}</span><br>`;
+                    const p = u.permissoes || {};
+                    const checkPerm = (val, label) => val ? `<span class="badge" style="background:#e2e8f0; color:#333; margin-top:2px;">${label}</span> ` : '';
+                    
+                    badges += checkPerm(p.criar_demandas, 'Criar Dem');
+                    badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
+                    badges += checkPerm(p.editar_demandas, 'Edit Dem');
+                    badges += checkPerm(p.excluir_demandas, 'Exc Dem');
+                    badges += checkPerm(p.criar_acoes, 'Criar Ação');
+                    badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
+                }
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${u.id.substring(0,5)}...</td>
-                <td>${u.email}</td>
-                <td>${u.role}</td>
-                <td>${badges}</td>
-                <td>
-                    ${btnReset}
-                    <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
-                    ${btnExcluir}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${u.id.substring(0,5)}...</td>
+                    <td>${u.email}</td>
+                    <td>${u.role}</td>
+                    <td>${badges}</td>
+                    <td>
+                        ${btnReset}
+                        <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
+                        ${btnExcluir}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error("❌ Erro ao carregar usuários:", error);
+        }
     },
 
     async resetarSenhaUsuario(email, userId) {
@@ -2158,6 +2306,7 @@ const app = {
     // CONTATOS
     // ==========================================
     async initContatos() {
+        console.log("📇 Inicializando Contatos...");
         try {
             document.body.style.cursor = 'wait';
             const snap = await db.collection('contatos').get();
