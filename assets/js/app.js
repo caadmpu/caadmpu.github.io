@@ -12,28 +12,25 @@ const firebaseConfig = {
 };
 
 // ==========================================
+// DESATIVE A RESTRIÇÃO DE DOMÍNIO PARA TESTES
+// ==========================================
+const DOMINIO_AUTORIZADO = ""; // Deixe vazio para permitir qualquer e-mail
+
+// ==========================================
 // INICIALIZAÇÃO SEGURA (EVITA DUPLICIDADE)
 // ==========================================
 console.log("🚀 Iniciando app...");
 
-// DESATIVA QUALQUER INSTÂNCIA EXISTENTE
 if (firebase.apps.length) {
     console.log("⚠️ Removendo instâncias anteriores do Firebase...");
     firebase.apps.forEach(app => app.delete());
 }
 
-// INICIALIZA UMA ÚNICA VEZ
 const appInstance = firebase.initializeApp(firebaseConfig);
 console.log("✅ Firebase inicializado:", appInstance.name);
 
 const db = firebase.firestore();
 const auth = firebase.auth();
-
-// ==========================================
-// CONFIGURAÇÕES DE SEGURANÇA
-// ==========================================
-// DESATIVE A RESTRIÇÃO DE DOMÍNIO PARA TESTES
-const DOMINIO_AUTORIZADO = ""; // Deixe vazio
 
 // ==========================================
 // OBJETO PRINCIPAL DA APLICAÇÃO
@@ -77,9 +74,6 @@ const app = {
             if (e.target.id === 'globalModal') this.closeModal();
         });
         
-        // ==========================================
-        // CONFIGURA OS BOTÕES DE LOGIN
-        // ==========================================
         this._setupLoginButtons();
         
         // ==========================================
@@ -166,9 +160,7 @@ const app = {
         
         console.log("✅ App inicializado com sucesso!");
         
-        // ==========================================
-        // BOTÃO DE EMERGÊNCIA (CRIAR ADMIN)
-        // ==========================================
+        // Botão de emergência para criar Admin
         const loginBox = document.querySelector('.login-box h2');
         if (loginBox) {
             loginBox.style.cursor = 'pointer';
@@ -198,7 +190,6 @@ const app = {
         // Botão "Google"
         const googleBtn = document.querySelector('button[onclick*="doLoginGoogle"]');
         if (googleBtn) {
-            // Remove onclick inline e adiciona listener
             googleBtn.removeAttribute('onclick');
             googleBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -236,7 +227,7 @@ const app = {
     },
 
     // ==========================================
-    // LOGIN COM GOOGLE (VERSÃO ESTABILIZADA)
+    // LOGIN COM GOOGLE
     // ==========================================
     async doLoginGoogle() {
         console.log("🔐 Tentando login com Google...");
@@ -245,13 +236,11 @@ const app = {
         errDiv.innerText = 'Abrindo popup do Google...';
         
         try {
-            // Usa redirect em vez de popup para maior compatibilidade
             const provider = new firebase.auth.GoogleAuthProvider();
             provider.setCustomParameters({
                 prompt: 'select_account'
             });
             
-            // Tenta popup primeiro
             try {
                 const result = await auth.signInWithPopup(provider);
                 console.log("✅ Login Google (popup) bem-sucedido:", result.user.email);
@@ -260,22 +249,15 @@ const app = {
             } catch (popupError) {
                 console.warn("⚠️ Popup falhou, tentando redirect...", popupError.code);
                 
-                // Se popup falhar, usa redirect
                 if (popupError.code === 'auth/popup-blocked' || 
                     popupError.code === 'auth/popup-closed-by-user') {
                     
                     errDiv.innerText = 'Popup bloqueado ou fechado. Redirecionando...';
-                    
-                    // Usa redirect como fallback
                     await auth.signInWithRedirect(provider);
-                    // O usuário será redirecionado e voltará para a página
-                    // O onAuthStateChanged cuidará do resto
                     return;
                 }
-                
                 throw popupError;
             }
-            
         } catch (error) {
             console.error("❌ Erro no login Google:", error.code, error.message);
             
@@ -334,7 +316,6 @@ const app = {
             const email = "admin@admin.com";
             const senha = "admin123";
             
-            // Verifica se já existe no Auth
             try {
                 const user = await auth.signInWithEmailAndPassword(email, senha);
                 console.log("✅ Admin já existe:", user.user.email);
@@ -347,11 +328,9 @@ const app = {
                 }
             }
             
-            // Cria o usuário
             const cred = await auth.createUserWithEmailAndPassword(email, senha);
             console.log("✅ Admin criado:", cred.user.email);
             
-            // Salva no Firestore
             await db.collection('usuarios').doc(cred.user.uid).set({
                 login: 'admin',
                 email: email,
@@ -371,10 +350,6 @@ const app = {
         }
     },
 
-    // ==========================================
-    // RESTANTE DO CÓDIGO (manter igual)
-    // ==========================================
-    
     // ==========================================
     // SHOW LOGIN / SHOW APP
     // ==========================================
@@ -401,7 +376,7 @@ const app = {
     },
 
     // ==========================================
-    // DEMAIS MÉTODOS (mantidos do código original)
+    // DEMAIS MÉTODOS AUXILIARES
     // ==========================================
     initColunasVisiveis() {
         const saved = localStorage.getItem('colunas_visiveis');
@@ -570,7 +545,7 @@ const app = {
     },
 
     // ==========================================
-    // VIEWS (MAINTAIN ORIGINAL)
+    // VIEWS
     // ==========================================
     loadView(view) {
         if (view === 'usuarios' && (!this.userDoc || this.userDoc.role !== 'ADM')) return;
@@ -973,6 +948,9 @@ const app = {
         return '#64748b';
     },
 
+    // ==========================================
+    // RENDERIZAÇÃO DA TABELA DE DEMANDAS (CORRIGIDA)
+    // ==========================================
     renderTabelaDemandas(demandas) {
         const theadTr = document.getElementById('demandas-thead-tr');
         if(theadTr) {
@@ -1007,15 +985,18 @@ const app = {
                     }
                 });
 
+                // ==========================================
+                // BOTÕES DE AÇÃO CORRIGIDOS
+                // ==========================================
                 tdHtml += `
                 <td>
                     <button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>
-                    <button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
-                    <button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>
+                    <button class="btn btn-sm btn-secondary" onclick="app.abrirModalDemandaEditar('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="app.confirmarExcluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                    <button class="btn btn-sm btn-success" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF"><i class="ri-file-pdf-2-line"></i></button>
                     ${d.arquivada 
-                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
-                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
+                        ? `<button class="btn btn-sm btn-warning" onclick="app.confirmarDesarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
+                        : `<button class="btn btn-sm btn-secondary" onclick="app.confirmarArquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
                     }
                 </td>
                 `;
@@ -1117,22 +1098,123 @@ const app = {
         container.innerHTML = html;
     },
 
-    async arquivarDemanda(id) {
-        if(await this.showConfirm('Arquivar esta demanda?', 'Arquivar', 'Cancelar', false)) {
-            await db.collection('demandas').doc(id).update({ arquivada: true });
-            this.carregarDemandas();
+    // ==========================================
+    // FUNÇÕES CORRIGIDAS PARA BOTÕES DE AÇÃO
+    // ==========================================
+
+    // Editar Demanda (abre modal com dados)
+    async abrirModalDemandaEditar(id) {
+        console.log("✏️ Editando demanda:", id);
+        try {
+            const doc = await db.collection('demandas').doc(id).get();
+            if (!doc.exists) {
+                await this.showAlert("Demanda não encontrada.");
+                return;
+            }
+            const d = doc.data();
+            d.id = doc.id;
+            this.openModalDemanda(d);
+        } catch (error) {
+            console.error("Erro ao editar demanda:", error);
+            await this.showAlert("Erro ao carregar dados para edição.");
         }
     },
-    
-    async desarquivarDemanda(id) {
-        if(await this.showConfirm('Desarquivar esta demanda?', 'Desarquivar', 'Cancelar', false)) {
-            await db.collection('demandas').doc(id).update({ arquivada: false });
+
+    // Excluir Demanda (com confirmação)
+    async confirmarExcluirDemanda(id) {
+        console.log("🗑️ Solicitando exclusão da demanda:", id);
+        const confirmado = await this.showConfirm(
+            "Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda?\n\nEsta ação não pode ser desfeita!",
+            "Excluir",
+            "Cancelar",
+            true
+        );
+        if (confirmado) {
+            await this.excluirDemanda(id);
+        }
+    },
+
+    // Arquivar Demanda (com confirmação)
+    async confirmarArquivarDemanda(id) {
+        console.log("📦 Solicitando arquivamento da demanda:", id);
+        const confirmado = await this.showConfirm(
+            "Deseja arquivar esta demanda?",
+            "Arquivar",
+            "Cancelar",
+            false
+        );
+        if (confirmado) {
+            await this.arquivarDemanda(id);
+        }
+    },
+
+    // Desarquivar Demanda (com confirmação)
+    async confirmarDesarquivarDemanda(id) {
+        console.log("📤 Solicitando desarquivamento da demanda:", id);
+        const confirmado = await this.showConfirm(
+            "Deseja desarquivar esta demanda?",
+            "Desarquivar",
+            "Cancelar",
+            false
+        );
+        if (confirmado) {
+            await this.desarquivarDemanda(id);
+        }
+    },
+
+    // Método de exclusão definitiva
+    async excluirDemanda(id) {
+        console.log("🗑️ Excluindo demanda definitivamente:", id);
+        try {
+            await db.collection('demandas').doc(id).delete();
+            
+            const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
+            const batch = db.batch();
+            acoes.forEach(a => batch.delete(a.ref));
+            await batch.commit();
+            
+            await this.showAlert("Demanda excluída com sucesso!");
             this.carregarDemandas();
+        } catch (error) {
+            console.error("Erro ao excluir demanda:", error);
+            await this.showAlert("Erro ao excluir demanda: " + error.message);
+        }
+    },
+
+    // Arquivar Demanda
+    async arquivarDemanda(id) {
+        console.log("📦 Arquivando demanda:", id);
+        try {
+            await db.collection('demandas').doc(id).update({ arquivada: true });
+            await this.showAlert("Demanda arquivada com sucesso!");
+            this.carregarDemandas();
+        } catch (error) {
+            console.error("Erro ao arquivar demanda:", error);
+            await this.showAlert("Erro ao arquivar demanda.");
+        }
+    },
+
+    // Desarquivar Demanda
+    async desarquivarDemanda(id) {
+        console.log("📤 Desarquivando demanda:", id);
+        try {
+            await db.collection('demandas').doc(id).update({ arquivada: false });
+            await this.showAlert("Demanda desarquivada com sucesso!");
+            this.carregarDemandas();
+        } catch (error) {
+            console.error("Erro ao desarquivar demanda:", error);
+            await this.showAlert("Erro ao desarquivar demanda.");
         }
     },
 
     async excluirDemandaEVoltar(id) {
-        if(await this.showConfirm("Tem certeza que deseja excluir esta demanda definitivamente?", "Excluir", "Cancelar")) {
+        const confirmado = await this.showConfirm(
+            "Tem certeza que deseja excluir esta demanda definitivamente?",
+            "Excluir",
+            "Cancelar",
+            true
+        );
+        if (confirmado) {
             try {
                 await db.collection('demandas').doc(id).delete();
                 const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
@@ -1145,6 +1227,9 @@ const app = {
         }
     },
 
+    // ==========================================
+    // DETALHES DA DEMANDA
+    // ==========================================
     async abrirDetalhesDemanda(id) {
         document.body.style.cursor = 'wait';
         try {
@@ -1157,10 +1242,10 @@ const app = {
 
             const actionsDiv = document.getElementById('detalhe-actions');
             actionsDiv.innerHTML = `
-                <button class="btn btn-secondary" onclick="app.editarDemanda('${id}')"><i class="ri-edit-line"></i> Editar</button>
+                <button class="btn btn-secondary" onclick="app.abrirModalDemandaEditar('${id}')"><i class="ri-edit-line"></i> Editar</button>
                 ${d.arquivada 
-                    ? `<button class="btn btn-secondary" onclick="app.desarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
-                    : `<button class="btn btn-secondary" onclick="app.arquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
+                    ? `<button class="btn btn-secondary" onclick="app.confirmarDesarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
+                    : `<button class="btn btn-secondary" onclick="app.confirmarArquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
                 }
                 <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
                 <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
@@ -1231,7 +1316,7 @@ const app = {
                 <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
                 <td>
                     <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm btn-danger-outline" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>
                 </td>
             </tr>
         `).join('');
@@ -1301,6 +1386,9 @@ const app = {
         }
     },
 
+    // ==========================================
+    // MODAL DE DEMANDA (CRIAR/EDITAR)
+    // ==========================================
     async openModalDemanda(d = null) {
         const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
         const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
@@ -1570,24 +1658,6 @@ const app = {
         document.body.style.cursor = 'default';
     },
 
-    async excluirDemanda(id) {
-        if(await this.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.", "Excluir", "Cancelar")) {
-            try {
-                await db.collection('demandas').doc(id).delete();
-                const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
-                const batch = db.batch();
-                acoes.forEach(a => batch.delete(a.ref));
-                await batch.commit();
-                
-                await this.showAlert("Demanda excluída com sucesso!");
-                this.carregarDemandas();
-            } catch(e) {
-                console.error("Erro ao excluir demanda:", e);
-                await this.showAlert("Erro ao excluir demanda.");
-            }
-        }
-    },
-
     async openModalImportar() {
         const html = `
             <div class="alert alert-info" style="margin-bottom: 15px; padding: 15px; background: #e0f2fe; border-radius: 8px; color: #0369a1; border: 1px solid #bae6fd;">
@@ -1669,14 +1739,6 @@ const app = {
         if(snap.empty) {
             await db.collection(tabela).add({ nome: nome });
         }
-    },
-
-    async editarDemanda(id) {
-        const doc = await db.collection('demandas').doc(id).get();
-        if(!doc.exists) await this.showAlert("Demanda não encontrada."); return;
-        const d = doc.data();
-        d.id = doc.id;
-        this.openModalDemanda(d);
     },
 
     getColorForText(str) {
