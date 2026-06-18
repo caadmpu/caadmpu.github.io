@@ -1023,27 +1023,21 @@ const app = {
                 </div>
                 
                 <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;">
+                    <colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup>
                     <thead>
-                        <tr style="background: #f1f5f9; page-break-inside: avoid;">
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Ação</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Responsável</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Status Mudou</th>
+                        <tr style="background:#f1f5f9;">
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Data</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Ação</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Responsável</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Status Mudou</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        ${acoes.length === 0 ? '<tr style="page-break-inside: avoid;"><td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr>' : 
-                        acoes.map(a => `
-                            <tr style="page-break-inside: avoid;">
-                                <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.status_nome || '-'}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
                 </table>
+                ${acoes.length === 0
+                    ? `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup><tbody><tr><td colspan="4" style="padding:8px; border:1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr></tbody></table>`
+                    : acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.status_nome || '-'}</td></tr></tbody></table>`).join('')
+                }
             </div>
         `;
 
@@ -1091,11 +1085,27 @@ const app = {
 
         const colsVisiveis = this.colunasVisiveis.filter(c => c.show && c.key !== 'processo');
 
-        const theadHtml = colsVisiveis.map(c => `<th style="padding: 6px 8px; border: 1px solid #ccc; background:#f1f5f9; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">${c.label}</th>`).join('');
+        // Calcula larguras proporcionais para as colunas
+        const colWidths = colsVisiveis.map(c => {
+            if (c.key === 'numero') return '6%';
+            if (c.key === 'data') return '8%';
+            if (c.key === 'status') return '12%';
+            if (c.key === 'coordenacao') return '14%';
+            if (c.key === 'tipo') return '12%';
+            if (c.key === 'responsavel') return '13%';
+            if (c.key === 'escola') return '20%';
+            if (c.key === 'demandante') return '15%';
+            return '10%';
+        });
 
-        const tbodyHtml = rows.map(d => {
-            const cssStatus = (typeof d.status_nome === 'string') ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
-            const tds = colsVisiveis.map(c => {
+        const colgroupHtml = colWidths.map(w => `<col style="width:${w}">`).join('');
+        const theadCols = colsVisiveis.map((c, i) =>
+            `<th style="padding:6px 8px; border:1px solid #ccc; background:#f1f5f9; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; width:${colWidths[i]}">${c.label}</th>`
+        ).join('');
+
+        // Cada linha vira sua própria <table> com page-break-inside:avoid
+        const rowTablesHtml = rows.map(d => {
+            const tds = colsVisiveis.map((c, i) => {
                 let val = '-';
                 switch(c.key) {
                     case 'numero': val = d.numero_registro || '-'; break;
@@ -1108,13 +1118,13 @@ const app = {
                     case 'responsavel': val = d.funcionario_nome || '-'; break;
                     case 'processo': val = d.processo_siged || '-'; break;
                 }
-                return `<td style="padding: 6px 8px; border: 1px solid #ddd; font-size:10px; word-break: break-word; max-width: 180px;">${val}</td>`;
+                return `<td style="padding:6px 8px; border:1px solid #ddd; font-size:10px; word-wrap:break-word; overflow-wrap:break-word; width:${colWidths[i]}">${val}</td>`;
             }).join('');
-            return `<tr style="page-break-inside: avoid;">${tds}</tr>`;
+            return `<table style="width:100%; border-collapse:collapse; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup>${colgroupHtml}</colgroup><tbody><tr>${tds}</tr></tbody></table>`;
         }).join('');
 
         let htmlContent = `
-            <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif;">
+            <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color:#333;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
                     <img src="assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
                     <div style="text-align: center;">
@@ -1125,18 +1135,11 @@ const app = {
                     </div>
                     <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
                 </div>
-                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
-                    <thead>
-                        <tr>${theadHtml}</tr>
-                    </thead>
-                    <tbody>
-                        ${tbodyHtml}
-                    </tbody>
-                </table>
+                <table style="width:100%; border-collapse:collapse; table-layout:fixed;"><colgroup>${colgroupHtml}</colgroup><thead><tr>${theadCols}</tr></thead></table>
+                ${rowTablesHtml}
             </div>
         `;
 
-        // Cria um container invisível temporário
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
         tempDiv.style.position = 'absolute';
@@ -1154,6 +1157,7 @@ const app = {
             document.body.removeChild(tempDiv);
         });
     },
+
 
     async arquivarDemanda(id) {
         if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
@@ -1662,24 +1666,20 @@ const app = {
                     </div>
                     
                     <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;">
+                        <colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup>
                         <thead>
-                            <tr style="background:#f1f5f9; page-break-inside: avoid;">
-                                <th style="padding: 8px; border: 1px solid #ddd;">Data</th>
-                                <th style="padding: 8px; border: 1px solid #ddd;">Ação/Descrição</th>
-                                <th style="padding: 8px; border: 1px solid #ddd;">Usuário</th>
+                            <tr style="background:#f1f5f9;">
+                                <th style="padding:8px; border:1px solid #ddd;">Data</th>
+                                <th style="padding:8px; border:1px solid #ddd;">Ação/Descrição</th>
+                                <th style="padding:8px; border:1px solid #ddd;">Usuário</th>
                             </tr>
                         </thead>
-                        <tbody>
-                        ${acoes.length ? acoes.map(a => `
-                            <tr style="page-break-inside: avoid;">
-                                <td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.descricao || '-'}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">${a.funcionario_nome || '-'}</td>
-                            </tr>
-                        `).join('') : '<tr style="page-break-inside: avoid;"><td colspan="3" style="padding: 8px; text-align: center; border: 1px solid #ddd;">Nenhuma ação registrada.</td></tr>'}
-                        </tbody>
                     </table>
+                    ${acoes.length
+                        ? acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td></tr></tbody></table>`).join('')
+                        : `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td colspan="3" style="padding:8px; border:1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr></tbody></table>`
+                    }
                 </div>
             `;
 
