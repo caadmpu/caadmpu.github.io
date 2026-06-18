@@ -51,6 +51,7 @@ const app = {
 
     init() {
         this.initColunasVisiveis();
+        this.initTheme();
         this.bindNav();
         this.startClock();
         
@@ -128,6 +129,34 @@ const app = {
                     if (parsed[col.key] !== undefined) col.show = parsed[col.key];
                 });
             } catch(e) { console.error(e); }
+        }
+    },
+
+    initTheme() {
+        const saved = localStorage.getItem('tema_app') || 'light';
+        document.documentElement.setAttribute('data-theme', saved);
+        this._updateThemeIcon(saved);
+    },
+
+    toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('tema_app', next);
+        this._updateThemeIcon(next);
+    },
+
+    _updateThemeIcon(theme) {
+        const icon = document.getElementById('themeToggleIcon');
+        if (!icon) return;
+        if (theme === 'dark') {
+            icon.className = 'ri-sun-line';
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.title = 'Mudar para Modo Claro';
+        } else {
+            icon.className = 'ri-moon-line';
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.title = 'Mudar para Modo Dark';
         }
     },
 
@@ -400,14 +429,18 @@ const app = {
     _renderDashboard() {
         const demandas = this._getDashDemandas();
 
-        let finalizadas = 0, andamento = 0, arquivadas = 0;
+        let finalizadas = 0, andamento = 0, arquivadas = 0, aguardando = 0, aguardandoSede = 0;
         const statusCount = {}, tipoCount = {}, respCount = {}, escolaCount = {}, setorCount = {};
 
         demandas.forEach(d => {
-            if (d.arquivada) arquivadas++;
-            else {
-                if (d.status_nome === 'FINALIZADA') finalizadas++;
-                if (d.status_nome === 'EM ANDAMENTO') andamento++;
+            if (d.arquivada) {
+                arquivadas++;
+            } else {
+                const sn = (d.status_nome || '').toUpperCase();
+                if (sn === 'FINALIZADA') finalizadas++;
+                if (sn === 'EM ANDAMENTO') andamento++;
+                if (sn === 'AGUARDANDO ATENDIMENTO') aguardando++;
+                if (sn.includes('AGUARDANDO') && sn.includes('SEDE')) aguardandoSede++;
             }
             statusCount[d.status_nome] = (statusCount[d.status_nome] || 0) + 1;
             tipoCount[d.tipo_nome] = (tipoCount[d.tipo_nome] || 0) + 1;
@@ -420,6 +453,10 @@ const app = {
         document.getElementById('kpi-finalizadas').innerText = finalizadas;
         document.getElementById('kpi-andamento').innerText = andamento;
         document.getElementById('kpi-arquivadas').innerText = arquivadas;
+        const kpiAg = document.getElementById('kpi-aguardando');
+        const kpiAgSede = document.getElementById('kpi-aguardando-sede');
+        if (kpiAg) kpiAg.innerText = aguardando;
+        if (kpiAgSede) kpiAgSede.innerText = aguardandoSede;
 
         // Armazena os datasets filtrados
         this._dashChartData = {
@@ -1048,8 +1085,32 @@ const app = {
     },
 
     exportarRelatorioPDF() {
-        const trs = document.querySelectorAll('#demandas-tbody tr');
-        if (trs.length === 0) return alert("Nenhuma demanda na tabela para exportar.");
+        const rows = this.demandasFiltradas || [];
+        if (rows.length === 0) return alert("Nenhuma demanda na tabela para exportar.");
+
+        const colsVisiveis = this.colunasVisiveis.filter(c => c.show && c.key !== 'processo');
+
+        const theadHtml = colsVisiveis.map(c => `<th style="padding: 6px 8px; border: 1px solid #ccc; background:#f1f5f9; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">${c.label}</th>`).join('');
+
+        const tbodyHtml = rows.map(d => {
+            const cssStatus = (typeof d.status_nome === 'string') ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
+            const tds = colsVisiveis.map(c => {
+                let val = '-';
+                switch(c.key) {
+                    case 'numero': val = d.numero_registro || '-'; break;
+                    case 'data': val = this.formatarDataBR(d.data_registro); break;
+                    case 'demandante': val = d.demandante_nome || '-'; break;
+                    case 'coordenacao': val = d.coordenadoria_nome || '-'; break;
+                    case 'escola': val = d.escola_nome || '-'; break;
+                    case 'tipo': val = d.tipo_nome || '-'; break;
+                    case 'status': val = d.status_nome || '-'; break;
+                    case 'responsavel': val = d.funcionario_nome || '-'; break;
+                    case 'processo': val = d.processo_siged || '-'; break;
+                }
+                return `<td style="padding: 6px 8px; border: 1px solid #ddd; font-size:10px; word-break: break-word; max-width: 180px;">${val}</td>`;
+            }).join('');
+            return `<tr style="page-break-inside: avoid;">${tds}</tr>`;
+        }).join('');
 
         let htmlContent = `
             <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif;">
@@ -1063,37 +1124,16 @@ const app = {
                     </div>
                     <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
                 </div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
                     <thead>
-                        <tr style="background-color: #f1f5f9; color: #333;">
-                            <th style="padding: 6px; border: 1px solid #ddd;">Nº</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Data</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Demandante</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Coordenação</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Escola</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Tipo</th>
-                            <th style="padding: 6px; border: 1px solid #ddd;">Status</th>
-                        </tr>
+                        <tr>${theadHtml}</tr>
                     </thead>
                     <tbody>
+                        ${tbodyHtml}
+                    </tbody>
+                </table>
+            </div>
         `;
-
-        trs.forEach(tr => {
-            const tds = tr.querySelectorAll('td');
-            htmlContent += `
-                <tr>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[0].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[1].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[2].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[3].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[4].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[5].innerText}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${tds[6].innerText}</td>
-                </tr>
-            `;
-        });
-
-        htmlContent += `</tbody></table></div>`;
 
         // Cria um container invisível temporário
         const tempDiv = document.createElement('div');
@@ -1106,8 +1146,9 @@ const app = {
             margin: 10,
             filename: `Relatorio_Demandas_${Date.now()}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
         }).save().then(() => {
             document.body.removeChild(tempDiv);
         });
