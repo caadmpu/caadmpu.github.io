@@ -1370,3 +1370,184 @@ body {
 .chart-selector:focus {
     border-color: var(--primary-color);
 }
+
+
+/* =========================================
+   POPUP DE ALERTA CENTRALIZADO
+   ========================================= */
+.alert-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(4px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.alert-popup-overlay.active {
+    display: flex;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.alert-popup {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    padding: 30px;
+    max-width: 450px;
+    width: 90%;
+    text-align: center;
+    animation: slideIn 0.3s ease-out;
+}
+
+.alert-popup-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+    display: inline-block;
+}
+
+.alert-popup-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 10px;
+}
+
+.alert-popup-message {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-bottom: 25px;
+    line-height: 1.5;
+}
+
+.alert-popup-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.alert-popup-button {
+    padding: 10px 24px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    font-size: 0.95rem;
+    min-width: 100px;
+}
+
+.alert-popup-button.primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.alert-popup-button.primary:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.alert-popup-button.secondary {
+    background: var(--background);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+}
+
+.alert-popup-button.secondary:hover {
+    background: var(--border);
+    transform: translateY(-2px);
+}
+
+.alert-popup-button.danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.alert-popup-button.danger:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.alert-popup-button.success {
+    background: var(--success-color);
+    color: white;
+}
+
+.alert-popup-button.success:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.alert-popup-button.warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.alert-popup-button.warning:hover {
+    background: #d97706;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+/* Tipos de alerta com cores diferentes */
+.alert-popup.info {
+    border-left: 4px solid var(--primary-color);
+}
+
+.alert-popup.success {
+    border-left: 4px solid var(--success-color);
+}
+
+.alert-popup.warning {
+    border-left: 4px solid var(--warning-color);
+}
+
+.alert-popup.danger {
+    border-left: 4px solid var(--danger-color);
+}
+
+.alert-popup.info .alert-popup-icon {
+    color: var(--primary-color);
+}
+
+.alert-popup.success .alert-popup-icon {
+    color: var(--success-color);
+}
+
+.alert-popup.warning .alert-popup-icon {
+    color: var(--warning-color);
+}
+
+.alert-popup.danger .alert-popup-icon {
+    color: var(--danger-color);
+}

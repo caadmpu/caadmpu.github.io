@@ -113,7 +113,9 @@ const app = {
                     this.showLogin();
                 }
             } catch (err) {
-                alert("Erro crítico no login: " + err.message + "\n\nStack: " + err.stack);
+                app.showAlert("Erro crítico no login: " + err.message + "
+
+Stack: " + err.stack, "Erro Crítico", "danger");
                 console.error(err);
                 document.getElementById('login_error').innerText = "Erro Crítico: " + err.message;
             }
@@ -259,7 +261,7 @@ const app = {
             await auth.currentUser.updatePassword(p1);
             await db.collection('usuarios').doc(this.userDoc.uid).update({ primeiro_login: false });
             this.userDoc.primeiro_login = false;
-            alert("Senha alterada com sucesso!");
+            app.showAlert("Senha alterada com sucesso!", "Sucesso", "success");
             this.closeModal();
             const btnClose = document.querySelector('.btn-close');
             if(btnClose) btnClose.style.display = 'block';
@@ -356,10 +358,10 @@ const app = {
         
         // Bloqueia telas com base nas novas permissões
         if (view === 'demandas' && !this.temPermissao('visualizar_demandas')) {
-            return alert("Sem permissão para visualizar demandas.");
+            return app.showAlert("Sem permissão para visualizar demandas.", "Acesso Negado", "danger");
         }
         if (view === 'cadastros' && !this.temPermissao('gerenciar_cadastros')) {
-            return alert("Sem permissão para visualizar cadastros.");
+            return app.showAlert("Sem permissão para visualizar cadastros.", "Acesso Negado", "danger");
         }
 
         this.currentView = view;
@@ -1060,7 +1062,7 @@ const app = {
     exportExcel() {
         let csvContent = "data:text/csv;charset=utf-8,";
         const rows = window.todasDemandas;
-        if(rows.length === 0) return alert('Sem dados para exportar');
+        if(rows.length === 0) return app.showAlert('Sem dados para exportar', 'Aviso', 'warning');
         
         const header = Object.keys(rows[0]).join(";");
         csvContent += header + "\r\n";
@@ -1081,7 +1083,7 @@ const app = {
 
     exportarRelatorioPDF() {
         const rows = this.demandasFiltradas || [];
-        if (rows.length === 0) return alert("Nenhuma demanda na tabela para exportar.");
+        if (rows.length === 0) return app.showAlert("Nenhuma demanda na tabela para exportar.", "Aviso", "warning");
 
         const colsVisiveis = this.colunasVisiveis.filter(c => c.show && c.key !== 'processo');
 
@@ -1160,16 +1162,16 @@ const app = {
 
 
     async arquivarDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
-        if(confirm('Arquivar esta demanda?')) {
+        if(!this.temPermissao('excluir_demandas')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm('Arquivar esta demanda?', 'Confirmar', () => { {
             await db.collection('demandas').doc(id).update({ arquivada: true });
             this.carregarDemandas();
         }
     },
     
     async desarquivarDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão");
-        if(confirm('Desarquivar esta demanda?')) {
+        if(!this.temPermissao('excluir_demandas')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm('Desarquivar esta demanda?', 'Confirmar', () => { {
             await db.collection('demandas').doc(id).update({ arquivada: false });
             this.carregarDemandas();
         }
@@ -1183,15 +1185,15 @@ const app = {
 
     // --- NOVA TELA DE DETALHES ---
     async excluirDemandaEVoltar(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão.");
-        if(confirm("Tem certeza que deseja excluir esta demanda definitivamente?")) {
+        if(!this.temPermissao('excluir_demandas')) return app.showAlert("Sem permissão.", "Acesso Negado", "danger");
+        app.showConfirm("Tem certeza que deseja excluir esta demanda definitivamente?", "Confirmar Exclusão", () => { {
             try {
                 await db.collection('demandas').doc(id).delete();
                 const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
                 const batch = db.batch();
                 acoes.forEach(a => batch.delete(a.ref));
                 await batch.commit();
-                alert("Excluída com sucesso.");
+                app.showAlert("Excluída com sucesso.", "Sucesso", "success");
                 this.voltarDemandas();
             } catch(e) { console.error(e); }
         }
@@ -1252,7 +1254,7 @@ const app = {
     },
 
     abrirFormNovaAcao(isEdit = false) {
-        if(!isEdit && !this.temPermissao('criar_acoes')) return alert("Sem permissão para criar ações");
+        if(!isEdit && !this.temPermissao('criar_acoes')) return app.showAlert("Sem permissão para criar ações", "Acesso Negado", "danger");
         document.getElementById('detalhe-acao-form-container').style.display = 'block';
         document.getElementById('detalhe-acao-id').value = '';
         document.getElementById('detalhe-acao-descricao').value = '';
@@ -1293,7 +1295,7 @@ const app = {
     },
 
     async editarAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('editar_acoes')) return alert("Sem permissão");
+        if(!this.temPermissao('editar_acoes')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
         try {
             const doc = await db.collection('acoes').doc(idAcao).get();
             if(!doc.exists) return;
@@ -1314,7 +1316,7 @@ const app = {
     },
 
     async salvarAcaoDetalhe() {
-        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) return alert("Sem permissão");
+        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
         
         const idAcao = document.getElementById('detalhe-acao-id').value;
         const dataAcao = document.getElementById('detalhe-acao-data').value;
@@ -1348,14 +1350,14 @@ const app = {
             await this.abrirDetalhesDemanda(this.demandaAbertaId); // Recarrega tudo
         } catch(e) {
             console.error(e);
-            alert("Erro ao salvar ação");
+            app.showAlert("Erro ao salvar ação", "Erro", "danger");
         }
         document.getElementById('btn-salvar-acao-detalhe').innerText = 'Registrar Ação';
     },
 
     async excluirAcaoDetalhe(idAcao) {
-        if(!this.temPermissao('excluir_acoes')) return alert("Sem permissão");
-        if(confirm("Excluir esta ação?")) {
+        if(!this.temPermissao('excluir_acoes')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm("Excluir esta ação?", "Confirmar Exclusão", () => { {
             await db.collection('acoes').doc(idAcao).delete();
             await this.carregarAcoesDetalhe(this.demandaAbertaId);
         }
@@ -1363,7 +1365,7 @@ const app = {
 
     // Nova Demanda
     async openModalDemanda(d = null) {
-        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
 
         const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
         const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
@@ -1570,17 +1572,17 @@ const app = {
     },
 
     async resetarContadorDemandas() {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(confirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\\n\\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
+        if(!this.temPermissao('gerenciar_cadastros')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\n\nIsso NÃO afeta nem exclui as demandas já existentes!", "Confirmar", () => {
             const anoAtual = new Date().getFullYear();
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: 0 });
-            alert("Contador resetado com sucesso! A próxima demanda será a 0001.");
+            app.showAlert("Contador resetado com sucesso! A próxima demanda será a 0001.", "Sucesso", "success");
         }
     },
 
     async renumerarTudo() {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(!confirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\\n\\nDeseja prosseguir?")) return;
+        if(!this.temPermissao('gerenciar_cadastros')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\n\nDeseja prosseguir?", "Confirmar", () => {
         
         try {
             document.body.style.cursor = 'wait';
@@ -1612,13 +1614,13 @@ const app = {
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: seq - 1 });
             
             document.body.style.cursor = 'default';
-            alert(`Sucesso! ${demandas.length} demandas foram renumeradas.`);
+            app.showAlert(`Sucesso! ${demandas.length} demandas foram renumeradas.`, "Sucesso", "success");
             this.carregarDemandas();
             
         } catch(e) {
             document.body.style.cursor = 'default';
             console.error(e);
-            alert("Erro ao renumerar: " + e.message);
+            app.showAlert("Erro ao renumerar: " + e.message, "Erro", "danger");
         }
     },
 
@@ -1703,14 +1705,14 @@ const app = {
             document.body.removeChild(tempDiv);
         } catch (e) {
             console.error("Erro ao gerar PDF:", e);
-            alert("Erro ao gerar PDF.");
+            app.showAlert("Erro ao gerar PDF.", "Erro", "danger");
         }
         document.body.style.cursor = 'default';
     },
 
     async excluirDemanda(id) {
-        if(!this.temPermissao('excluir_demandas')) return alert("Sem permissão para excluir demandas.");
-        if(confirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.")) {
+        if(!this.temPermissao('excluir_demandas')) return app.showAlert("Sem permissão para excluir demandas.", "Acesso Negado", "danger");
+        app.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.", "Confirmar Exclusão", () => { {
             try {
                 await db.collection('demandas').doc(id).delete();
                 // Opcional: deletar o histórico de ações também
@@ -1719,17 +1721,17 @@ const app = {
                 acoes.forEach(a => batch.delete(a.ref));
                 await batch.commit();
                 
-                alert("Demanda excluída com sucesso!");
+                app.showAlert("Demanda excluída com sucesso!", "Sucesso", "success");
                 this.carregarDemandas();
             } catch(e) {
                 console.error("Erro ao excluir demanda:", e);
-                alert("Erro ao excluir demanda.");
+                app.showAlert("Erro ao excluir demanda.", "Erro", "danger");
             }
         }
     },
 
     openModalImportar() {
-        if(!this.temPermissao('criar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('criar_demandas')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
         
         const html = `
             <div class="alert alert-info" style="margin-bottom: 15px; padding: 15px; background: #e0f2fe; border-radius: 8px; color: #0369a1; border: 1px solid #bae6fd;">
@@ -1751,7 +1753,7 @@ const app = {
 
     async processarImportacao() {
         const text = document.getElementById('importText').value.trim();
-        if(!text) return alert("Cole os dados primeiro!");
+        if(!text) return app.showAlert("Cole os dados primeiro!", "Aviso", "warning");
 
         const linhas = text.split('\n');
         let sucesso = 0;
@@ -1805,7 +1807,7 @@ const app = {
         }
 
         this.closeModal();
-        alert(`${sucesso} demandas importadas com sucesso!`);
+        app.showAlert(`${sucesso} demandas importadas com sucesso!`, "Sucesso", "success");
         this.carregarDemandas();
     },
 
@@ -1818,9 +1820,9 @@ const app = {
     },
 
     async editarDemanda(id) {
-        if(!this.temPermissao('editar_demandas')) return alert("Sem permissão");
+        if(!this.temPermissao('editar_demandas')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
         const doc = await db.collection('demandas').doc(id).get();
-        if(!doc.exists) return alert("Demanda não encontrada.");
+        if(!doc.exists) return app.showAlert("Demanda não encontrada.", "Erro", "danger");
         const d = doc.data();
         d.id = doc.id;
         this.openModalDemanda(d);
@@ -1972,7 +1974,7 @@ const app = {
     },
 
     openModalCadastro(row = null) {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
+        if(!this.temPermissao('gerenciar_cadastros')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
         const tabela = window.currentCadastroTable;
         let html = `<form id="cadastroForm">`;
         if (row) html += `<input type="hidden" name="id" value="${row.id}">`;
@@ -2020,8 +2022,8 @@ const app = {
     },
 
     async deletarCadastro(id) {
-        if(!this.temPermissao('gerenciar_cadastros')) return alert("Sem permissão");
-        if(confirm('Excluir este registro?')) {
+        if(!this.temPermissao('gerenciar_cadastros')) return app.showAlert("Sem permissão", "Acesso Negado", "danger");
+        app.showConfirm('Excluir este registro?', 'Confirmar Exclusão', () => { {
             await db.collection(window.currentCadastroTable).doc(id).delete();
             this.loadCadastroTable(window.currentCadastroTable);
         }
@@ -2070,14 +2072,14 @@ const app = {
     },
 
     async resetarSenhaUsuario(email, userId) {
-        if(!confirm(`Deseja enviar um e-mail de redefinição de senha para ${email} e forçar troca no login?`)) return;
+        if (!app._confirmPending) { app._confirmPending = true; app.showConfirm(`Deseja enviar um e-mail de redefinição de senha para ${email} e forçar troca no login?`, 'Confirmar', () => { app._confirmPending = false; return;
         try {
             await auth.sendPasswordResetEmail(email);
             await db.collection('usuarios').doc(userId).update({ primeiro_login: true, metodo_login: 'email' });
-            alert('E-mail enviado e flag de primeiro login ativada para este usuário.');
+            app.showAlert('E-mail enviado e flag de primeiro login ativada para este usuário.', 'Sucesso', 'success');
             this.initUsuarios();
         } catch(e) {
-            alert("Erro ao enviar reset de senha: " + e.message);
+            app.showAlert("Erro ao enviar reset de senha: " + e.message, "Erro", "danger");
         }
     },
 
@@ -2204,7 +2206,7 @@ const app = {
                     });
                 } else {
                     const senha = fd.get('senha');
-                    if(!senha) return alert("Por favor, digite a senha inicial.");
+                    if(!senha) return app.showAlert("Por favor, digite a senha inicial.", "Aviso", "warning");
                     
                     const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
                     const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
@@ -2224,13 +2226,13 @@ const app = {
                 this.closeModal();
                 this.initUsuarios();
             } catch (e) {
-                alert("Erro ao criar usuário: " + e.message);
+                app.showAlert("Erro ao criar usuário: " + e.message, "Erro", "danger");
             }
         }
     },
 
     async deletarUsuario(id) {
-        if(confirm('Remover acesso deste usuário?')) {
+        app.showConfirm('Remover acesso deste usuário?', 'Confirmar Remoção', () => {
             await db.collection('usuarios').doc(id).delete();
             this.initUsuarios();
         }
@@ -2259,9 +2261,9 @@ const app = {
                 permissoes: {}
             });
 
-            alert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123');
+            app.showAlert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123', 'Sucesso', 'success');
         } catch(e) {
-            alert('Erro no setup: ' + e.message);
+            app.showAlert('Erro no setup: ' + e.message, 'Erro', 'danger');
         }
     },
 
@@ -2283,6 +2285,76 @@ const app = {
 
     closeModal() {
         document.getElementById('globalModal').classList.remove('active');
+    },
+
+    // --- POPUP DE ALERTA CENTRALIZADO ---
+    showAlert(message, title = 'Aviso', type = 'info') {
+        const overlay = document.getElementById('alertPopupOverlay');
+        const popup = document.getElementById('alertPopup');
+        const icon = document.getElementById('alertPopupIcon');
+        const titleEl = document.getElementById('alertPopupTitle');
+        const messageEl = document.getElementById('alertPopupMessage');
+        const buttonsEl = document.getElementById('alertPopupButtons');
+
+        // Define o icone e cores baseado no tipo
+        const icons = {
+            'info': 'ℹ️',
+            'success': '✓',
+            'warning': '⚠️',
+            'danger': '✕',
+            'error': '✕'
+        };
+        const typeClass = type === 'error' ? 'danger' : type;
+        icon.textContent = icons[typeClass] || icons['info'];
+        popup.className = `alert-popup ${typeClass}`;
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+
+        // Botao OK
+        buttonsEl.innerHTML = `<button class="alert-popup-button primary" onclick="app.closeAlert()">OK</button>`;
+
+        overlay.classList.add('active');
+    },
+
+    showConfirm(message, title = 'Confirmar', onConfirm = null, onCancel = null) {
+        const overlay = document.getElementById('alertPopupOverlay');
+        const popup = document.getElementById('alertPopup');
+        const icon = document.getElementById('alertPopupIcon');
+        const titleEl = document.getElementById('alertPopupTitle');
+        const messageEl = document.getElementById('alertPopupMessage');
+        const buttonsEl = document.getElementById('alertPopupButtons');
+
+        icon.textContent = '❓';
+        popup.className = 'alert-popup info';
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+
+        // Botoes Confirmar e Cancelar
+        buttonsEl.innerHTML = `
+            <button class="alert-popup-button primary" onclick="app.confirmAlert(true)">Confirmar</button>
+            <button class="alert-popup-button secondary" onclick="app.confirmAlert(false)">Cancelar</button>
+        `;
+
+        // Armazena os callbacks
+        this._confirmCallbacks = { onConfirm, onCancel };
+
+        overlay.classList.add('active');
+    },
+
+    confirmAlert(confirmed) {
+        this.closeAlert();
+        if (confirmed && this._confirmCallbacks?.onConfirm) {
+            this._confirmCallbacks.onConfirm();
+        } else if (!confirmed && this._confirmCallbacks?.onCancel) {
+            this._confirmCallbacks.onCancel();
+        }
+        this._confirmCallbacks = null;
+    },
+
+    closeAlert() {
+        document.getElementById('alertPopupOverlay').classList.remove('active');
     },
 
     // --- CONTATOS ---
@@ -2402,11 +2474,11 @@ const app = {
             }
             this.closeModal();
             this.initContatos();
-        } catch(e) { console.error(e); alert("Erro ao salvar contato."); }
+        } catch(e) { console.error(e); app.showAlert("Erro ao salvar contato.", "Erro", "danger"); }
     },
 
     async excluirContato(id) {
-        if(confirm("Deseja realmente excluir este contato?")) {
+        app.showConfirm("Deseja realmente excluir este contato?", "Confirmar Exclusão", () => { {
             await db.collection('contatos').doc(id).delete();
             this.initContatos();
         }
@@ -2467,18 +2539,18 @@ const app = {
                 data: new Date().toISOString()
             });
             document.getElementById('sugestao-texto').value = '';
-            alert("Sua sugestão foi enviada com sucesso! Muito obrigado.");
+            app.showAlert("Sua sugestão foi enviada com sucesso! Muito obrigado.", "Sucesso", "success");
             this.carregarSugestoes();
         } catch(e) {
             console.error(e);
-            alert("Erro ao enviar sugestão.");
+            app.showAlert("Erro ao enviar sugestão.", "Erro", "danger");
         }
         btn.disabled = false;
         btn.innerHTML = '<i class="ri-send-plane-fill"></i> Enviar Sugestão';
     },
 
     async excluirSugestao(id) {
-        if(confirm("Apagar esta sugestão?")) {
+        app.showAlert("Sugestão excluída com sucesso!", "Sucesso", "success") {
             await db.collection('sugestoes').doc(id).delete();
             this.carregarSugestoes();
         }
