@@ -390,6 +390,54 @@ const app = {
         if (view === 'sugestoes') this.initSugestoes();
     },
 
+    refreshView() {
+        const btn = document.getElementById('btnRefreshView');
+        if (btn) {
+            btn.disabled = true;
+            const icon = btn.querySelector('i');
+            if (icon) icon.style.animation = 'spin 0.6s linear infinite';
+        }
+
+        // Recarrega a view atual preservando o estado do template
+        const view = this.currentView;
+        const container = document.getElementById('contentArea');
+        const template = document.getElementById(`view-${view}`);
+        if (template && container) {
+            container.innerHTML = template.innerHTML;
+        }
+
+        const initMap = {
+            'dashboard':  () => this.initDashboard(),
+            'demandas':   () => this.initDemandas(),
+            'kanban':     () => this.initKanban(),
+            'calendario': () => this.initCalendario(),
+            'cadastros':  () => this.initCadastros(),
+            'usuarios':   () => this.initUsuarios(),
+            'contatos':   () => this.initContatos(),
+            'sugestoes':  () => this.initSugestoes(),
+        };
+
+        const initFn = initMap[view];
+        const done = () => {
+            if (btn) {
+                btn.disabled = false;
+                const icon = btn.querySelector('i');
+                if (icon) icon.style.animation = '';
+            }
+        };
+
+        if (initFn) {
+            const result = initFn();
+            if (result && typeof result.then === 'function') {
+                result.then(done).catch(done);
+            } else {
+                done();
+            }
+        } else {
+            done();
+        }
+    },
+
     // --- DASHBOARD ---
     async initDashboard() {
         this._dashCoordFilter = 'TODAS'; // Estado do filtro de coordenação

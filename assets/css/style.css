@@ -1501,3 +1501,22 @@ body {
     border: 1.5px solid var(--border);
 }
 .btn-popup-cancel:hover { background: var(--border); }
+
+/* =========================================
+   BOTÃO ATUALIZAR — ANIMAÇÃO DE SPIN
+   ========================================= */
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.btn-refresh i {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.btn-refresh:hover i {
+    transform: rotate(90deg);
+}
+
