@@ -1,6 +1,7 @@
 // ==========================================
-// CONFIGURAÇÃO DO FIREBASE
+// CONFIGURAÇÃO DO FIREBASE (AÇÃO NECESSÁRIA)
 // ==========================================
+// Cole o firebaseConfig fornecido pelo Firebase Console aqui:
 const firebaseConfig = {
     apiKey: "AIzaSyDPYJhmsmGuLQePcWGH11RSLopL5LEovOM",
     authDomain: "gestao-demandas-app.firebaseapp.com",
@@ -12,29 +13,19 @@ const firebaseConfig = {
 };
 
 // ==========================================
-// DESATIVE A RESTRIÇÃO DE DOMÍNIO PARA TESTES
+// RESTRIÇÃO DE DOMÍNIO (Opcional)
 // ==========================================
-const DOMINIO_AUTORIZADO = "";
+// Se quiser permitir apenas e-mails de uma empresa, coloque aqui (ex: "@mpu.mp.br").
+// Deixe em branco ("") para permitir qualquer e-mail do Google.
+const DOMINIO_AUTORIZADO = "@educacao.am.gov.br"; 
 
-// ==========================================
-// INICIALIZAÇÃO SEGURA
-// ==========================================
-console.log("🚀 Iniciando app...");
-
-if (firebase.apps.length) {
-    console.log("⚠️ Removendo instâncias anteriores do Firebase...");
-    firebase.apps.forEach(app => app.delete());
+// Inicializa Firebase
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
 }
-
-const appInstance = firebase.initializeApp(firebaseConfig);
-console.log("✅ Firebase inicializado:", appInstance.name);
-
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// ==========================================
-// OBJETO PRINCIPAL DA APLICAÇÃO
-// ==========================================
 const app = {
     currentView: 'dashboard',
     charts: {},
@@ -42,7 +33,6 @@ const app = {
     kanbanSortables: [],
     userDoc: null,
     demandasFiltradas: [],
-    demandaAbertaId: null,
     colunasVisiveis: [
         { key: 'numero', label: 'Nº', show: true },
         { key: 'data', label: 'Data', show: true },
@@ -59,12 +49,7 @@ const app = {
         itemsPerPage: 10
     },
 
-    // ==========================================
-    // INICIALIZAÇÃO
-    // ==========================================
     init() {
-        console.log("🚀 Inicializando App...");
-        
         this.initColunasVisiveis();
         this.initTheme();
         this.bindNav();
@@ -75,274 +60,66 @@ const app = {
             if (e.target.id === 'globalModal') this.closeModal();
         });
         
-        this._setupLoginButtons();
-        
-        // ==========================================
-        // MONITOR DE AUTENTICAÇÃO
-        // ==========================================
+        // Monitora o status de login via Firebase Auth
         auth.onAuthStateChanged(async (user) => {
-            console.log("🔐 Auth state changed:", user ? user.email : "null");
-            
             try {
                 if (user) {
-                    if (DOMINIO_AUTORIZADO && !user.email.endsWith(DOMINIO_AUTORIZADO) && user.email !== 'admin@admin.com') {
-                        console.warn("⛔ Domínio não autorizado:", user.email);
-                        await auth.signOut();
-                        document.getElementById('login_error').innerText = 
-                            `Acesso restrito para e-mails com domínio: ${DOMINIO_AUTORIZADO}`;
-                        this.showLogin();
-                        return;
-                    }
-
-                    const userRef = db.collection('usuarios').doc(user.uid);
-                    let doc = await userRef.get();
-                    let userData = doc.exists ? doc.data() : null;
-
-                    if (!userData) {
-                        console.log("📂 Usuário não encontrado pelo UID, buscando por e-mail...");
-                        const snap = await db.collection('usuarios').where('email', '==', user.email).get();
-                        if (!snap.empty) {
-                            const oldDoc = snap.docs[0];
-                            userData = oldDoc.data();
-                            await userRef.set(userData);
-                            await oldDoc.ref.delete();
-                            console.log("✅ Dados migrados com sucesso!");
-                        }
-                    }
-
-                    if (!userData) {
-                        console.log("🆕 Criando novo usuário para:", user.email);
-                        const isAdminMaster = user.email === 'admin@admin.com';
-                        userData = {
-                            login: user.displayName || user.email.split('@')[0],
-                            email: user.email,
-                            role: isAdminMaster ? 'ADM' : 'COMUM',
-                            permissoes: {},
-                            primeiro_login: isAdminMaster ? false : true,
-                            criado_em: new Date().toISOString()
-                        };
-                        await userRef.set(userData);
-                        console.log("✅ Novo usuário criado com perfil:", userData.role);
-                    }
-
-                    this.userDoc = { uid: user.uid, ...userData };
-                    
-                    document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
-                    document.getElementById('user-avatar-initial').innerText = 
-                        (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
-                    
-                    if (this.userDoc.role === 'ADM') {
-                        document.getElementById('menu-usuarios').style.display = 'flex';
+                    // Busca as permissões pelo UID
+                    const doc = await db.collection('usuarios').doc(user.uid).get();
+                    if(doc.exists) {
+                        this.userDoc = { uid: user.uid, email: user.email, ...doc.data() };
+                        this.showApp();
                     } else {
-                        document.getElementById('menu-usuarios').style.display = 'none';
-                    }
+                        // Se não existe pelo UID, procura se o Admin pré-autorizou o e-mail
+                        const snap = await db.collection('usuarios').where('email', '==', user.email).get();
+                        
+                        if (snap.empty && user.email !== 'admin@admin.com') {
+                            // Não está na whitelist!
+                            await auth.signOut();
+                            document.getElementById('login_error').innerText = "Acesso Negado: Sua conta Google não foi autorizada pelo Administrador.";
+                            this.showLogin();
+                            return;
+                        }
 
-                    this.showApp();
-                    
-                    if (this.userDoc.primeiro_login && this.userDoc.email !== 'admin@admin.com') {
-                        setTimeout(() => this.abrirModalTrocarSenha(true), 500);
+                        // Está na whitelist! Migra os dados pré-cadastrados para o UID correto definitivo.
+                        let newUserDoc = {
+                            login: user.displayName || user.email.split('@')[0],
+                            email: user.email, 
+                            role: 'COMUM', 
+                            permissoes: {}
+                        };
+
+                        if(!snap.empty) {
+                            const prData = snap.docs[0].data();
+                            newUserDoc.role = prData.role || 'COMUM';
+                            newUserDoc.permissoes = prData.permissoes || {};
+                            await db.collection('usuarios').doc(snap.docs[0].id).delete();
+                        } else if (user.email === 'admin@admin.com') {
+                            newUserDoc.role = 'ADM';
+                        }
+
+                        await db.collection('usuarios').doc(user.uid).set(newUserDoc);
+                        this.userDoc = { uid: user.uid, ...newUserDoc };
                     }
                     
+                    if (this.userDoc.primeiro_login) {
+                        this.showApp();
+                        this.abrirModalTrocarSenha(true);
+                    } else {
+                        this.showApp();
+                    }
                 } else {
                     this.userDoc = null;
                     this.showLogin();
                 }
             } catch (err) {
-                console.error("❌ Erro no onAuthStateChanged:", err);
-                document.getElementById('login_error').innerText = "Erro: " + err.message;
-                this.showLogin();
+                await this.showAlert("Erro crítico no login: " + err.message + "\n\nStack: " + err.stack);
+                console.error(err);
+                document.getElementById('login_error').innerText = "Erro Crítico: " + err.message;
             }
         });
-        
-        console.log("✅ App inicializado com sucesso!");
-        
-        const loginBox = document.querySelector('.login-box h2');
-        if (loginBox) {
-            loginBox.style.cursor = 'pointer';
-            loginBox.title = 'Clique duas vezes para criar Admin Master';
-            loginBox.addEventListener('dblclick', () => {
-                if (confirm("Deseja criar o Admin Master?\nE-mail: admin@admin.com\nSenha: admin123")) {
-                    this.criarAdminMaster();
-                }
-            });
-        }
     },
 
-    // ==========================================
-    // CONFIGURA OS BOTÕES DE LOGIN
-    // ==========================================
-    _setupLoginButtons() {
-        const formLogin = document.getElementById('formLogin');
-        if (formLogin) {
-            formLogin.addEventListener('submit', (e) => {
-                e.preventDefault();
-                console.log("🖱️ Formulário de login submetido!");
-                this.doLogin();
-            });
-        }
-
-        const googleBtn = document.querySelector('button[onclick*="doLoginGoogle"]');
-        if (googleBtn) {
-            googleBtn.removeAttribute('onclick');
-            googleBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log("🖱️ Botão Google clicado!");
-                this.doLoginGoogle();
-            });
-        }
-    },
-
-    // ==========================================
-    // LOGIN
-    // ==========================================
-    async doLogin() {
-        console.log("🔐 Tentando login com email/senha...");
-        
-        const email = document.getElementById('login_user').value;
-        const pass = document.getElementById('login_pass').value;
-        const errDiv = document.getElementById('login_error');
-        
-        if (!email || !pass) {
-            errDiv.innerText = "Preencha e-mail e senha.";
-            return;
-        }
-        
-        errDiv.innerText = 'Autenticando...';
-        
-        try {
-            const result = await auth.signInWithEmailAndPassword(email, pass);
-            console.log("✅ Login bem-sucedido:", result.user.email);
-            errDiv.innerText = '';
-        } catch (error) {
-            console.error("❌ Erro no login:", error.code, error.message);
-            errDiv.innerText = this._getFirebaseErrorMessage(error);
-        }
-    },
-
-    async doLoginGoogle() {
-        console.log("🔐 Tentando login com Google...");
-        
-        const errDiv = document.getElementById('login_error');
-        errDiv.innerText = 'Abrindo popup do Google...';
-        
-        try {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            provider.setCustomParameters({ prompt: 'select_account' });
-            
-            try {
-                const result = await auth.signInWithPopup(provider);
-                console.log("✅ Login Google (popup) bem-sucedido:", result.user.email);
-                errDiv.innerText = '';
-                return;
-            } catch (popupError) {
-                console.warn("⚠️ Popup falhou, tentando redirect...", popupError.code);
-                
-                if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/popup-closed-by-user') {
-                    errDiv.innerText = 'Popup bloqueado ou fechado. Redirecionando...';
-                    await auth.signInWithRedirect(provider);
-                    return;
-                }
-                throw popupError;
-            }
-        } catch (error) {
-            console.error("❌ Erro no login Google:", error.code, error.message);
-            errDiv.innerText = this._getFirebaseErrorMessage(error);
-        }
-    },
-
-    _getFirebaseErrorMessage(error) {
-        const messages = {
-            'auth/user-not-found': 'Usuário não encontrado.',
-            'auth/wrong-password': 'Senha incorreta.',
-            'auth/invalid-email': 'E-mail inválido.',
-            'auth/user-disabled': 'Conta desativada.',
-            'auth/too-many-requests': 'Muitas tentativas. Tente mais tarde.',
-            'auth/network-request-failed': 'Erro de rede. Verifique sua conexão.',
-            'auth/internal-error': 'Erro interno. Tente novamente.',
-            'auth/email-already-in-use': 'E-mail já em uso.',
-            'auth/weak-password': 'Senha fraca (mínimo 6 caracteres).',
-            'auth/operation-not-allowed': 'Login com email/senha não habilitado.',
-            'auth/popup-blocked': 'Popup bloqueado pelo navegador.',
-            'auth/popup-closed-by-user': 'Popup fechado antes de concluir.'
-        };
-        return messages[error.code] || error.message || 'Erro desconhecido.';
-    },
-
-    async doLogout() {
-        console.log("🔓 Fazendo logout...");
-        try {
-            await auth.signOut();
-            console.log("✅ Logout realizado.");
-        } catch (err) {
-            console.error("❌ Erro no logout:", err);
-        }
-    },
-
-    async criarAdminMaster() {
-        console.log("👑 Criando Admin Master...");
-        try {
-            const email = "admin@admin.com";
-            const senha = "admin123";
-            
-            try {
-                const user = await auth.signInWithEmailAndPassword(email, senha);
-                console.log("✅ Admin já existe:", user.user.email);
-                await auth.signOut();
-                alert("Admin já existe!\n\nE-mail: admin@admin.com\nSenha: admin123");
-                return;
-            } catch (e) {
-                if (e.code !== 'auth/user-not-found' && e.code !== 'auth/wrong-password') {
-                    throw e;
-                }
-            }
-            
-            const cred = await auth.createUserWithEmailAndPassword(email, senha);
-            console.log("✅ Admin criado:", cred.user.email);
-            
-            await db.collection('usuarios').doc(cred.user.uid).set({
-                login: 'admin',
-                email: email,
-                role: 'ADM',
-                permissoes: {},
-                primeiro_login: false,
-                criado_em: new Date().toISOString()
-            });
-            
-            await auth.signOut();
-            console.log("✅ Admin master configurado!");
-            alert("✅ Admin master criado!\n\nE-mail: admin@admin.com\nSenha: admin123");
-            
-        } catch (err) {
-            console.error("❌ Erro ao criar admin:", err);
-            alert("Erro ao criar admin: " + err.message);
-        }
-    },
-
-    showLogin() {
-        document.getElementById('login-screen').classList.add('active');
-        document.getElementById('app-container').style.display = 'none';
-    },
-
-    showApp() {
-        document.getElementById('login-screen').classList.remove('active');
-        document.getElementById('app-container').style.display = 'flex';
-        
-        document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
-        document.getElementById('user-avatar-initial').innerText = 
-            (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
-        
-        if (this.userDoc.role === 'ADM') {
-            document.getElementById('menu-usuarios').style.display = 'flex';
-        } else {
-            document.getElementById('menu-usuarios').style.display = 'none';
-        }
-        
-        this.loadView(this.currentView);
-    },
-
-    // ==========================================
-    // MÉTODOS AUXILIARES
-    // ==========================================
     initColunasVisiveis() {
         const saved = localStorage.getItem('colunas_visiveis');
         if (saved) {
@@ -374,8 +151,12 @@ const app = {
         if (!icon) return;
         if (theme === 'dark') {
             icon.className = 'ri-sun-line';
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.title = 'Mudar para Modo Claro';
         } else {
             icon.className = 'ri-moon-line';
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.title = 'Mudar para Modo Dark';
         }
     },
 
@@ -396,6 +177,7 @@ const app = {
             return;
         }
 
+        // Renderiza os checkboxes
         menu.innerHTML = this.colunasVisiveis.map(col => `
             <label>
                 <input type="checkbox" ${col.show ? 'checked' : ''} onchange="app.toggleColumn('${col.key}', this.checked)">
@@ -404,12 +186,14 @@ const app = {
         `).join('');
         menu.style.display = 'flex';
 
+        // Fecha ao clicar fora — listener único e auto-removível
         const fecharFora = (e) => {
             if (wrapper && !wrapper.contains(e.target)) {
                 menu.style.display = 'none';
                 document.removeEventListener('click', fecharFora, true);
             }
         };
+        // Usa capture para capturar antes do bubbling; setTimeout evita fechar no mesmo clique
         setTimeout(() => document.addEventListener('click', fecharFora, true), 0);
     },
 
@@ -489,6 +273,63 @@ const app = {
         }
     },
 
+    showLogin() {
+        document.getElementById('login-screen').classList.add('active');
+        document.getElementById('app-container').style.display = 'none';
+    },
+
+    showApp() {
+        document.getElementById('login-screen').classList.remove('active');
+        document.getElementById('app-container').style.display = 'flex';
+        
+        document.getElementById('user-name-display').innerText = this.userDoc.login || this.userDoc.email;
+        document.getElementById('user-avatar-initial').innerText = (this.userDoc.login || this.userDoc.email).charAt(0).toUpperCase();
+        
+        if (this.userDoc.role === 'ADM') {
+            document.getElementById('menu-usuarios').style.display = 'flex';
+        } else {
+            document.getElementById('menu-usuarios').style.display = 'none';
+        }
+        
+        this.loadView(this.currentView);
+    },
+
+    async doLogin() {
+        const email = document.getElementById('login_user').value;
+        const pass = document.getElementById('login_pass').value;
+        const errDiv = document.getElementById('login_error');
+        errDiv.innerText = '';
+        
+        try {
+            await auth.signInWithEmailAndPassword(email, pass);
+            // onAuthStateChanged cuidará do redirecionamento
+        } catch (error) {
+            errDiv.innerText = "Erro: " + error.message;
+        }
+    },
+
+    async doLoginGoogle() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const errDiv = document.getElementById('login_error');
+        errDiv.innerText = '';
+        try {
+            await auth.signInWithPopup(provider);
+        } catch (error) {
+            errDiv.innerText = "Erro: " + error.message;
+        }
+    },
+
+    async doLogout() {
+        await auth.signOut();
+    },
+
+    // Segurança Frontend (Opcional, pois as regras do Firestore devem ser configuradas depois)
+    temPermissao(acao) {
+        if (!this.userDoc) return false;
+        if (this.userDoc.role === 'ADM') return true;
+        return !!(this.userDoc.permissoes && this.userDoc.permissoes[acao]);
+    },
+
     startClock() {
         setInterval(() => {
             const now = new Date();
@@ -509,12 +350,18 @@ const app = {
         });
     },
 
-    // ==========================================
-    // VIEWS
-    // ==========================================
-    loadView(view) {
+    async loadView(view) {
+        // Bloqueia visão de usuários se não for ADM
         if (view === 'usuarios' && (!this.userDoc || this.userDoc.role !== 'ADM')) return;
         
+        // Bloqueia telas com base nas novas permissões
+        if (view === 'demandas' && !this.temPermissao('visualizar_demandas')) {
+            await this.showAlert("Sem permissão para visualizar demandas."); return;
+        }
+        if (view === 'cadastros' && !this.temPermissao('gerenciar_cadastros')) {
+            await this.showAlert("Sem permissão para visualizar cadastros."); return;
+        }
+
         this.currentView = view;
         const container = document.getElementById('contentArea');
         const template = document.getElementById(`view-${view}`);
@@ -543,44 +390,34 @@ const app = {
         if (view === 'sugestoes') this.initSugestoes();
     },
 
-    // ==========================================
-    // DASHBOARD
-    // ==========================================
+    // --- DASHBOARD ---
     async initDashboard() {
-        console.log("📊 Inicializando Dashboard...");
-        this._dashCoordFilter = 'TODAS';
+        this._dashCoordFilter = 'TODAS'; // Estado do filtro de coordenação
 
-        try {
-            let query = db.collection('demandas');
-            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
-                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-            }
-            const snap = await query.get();
-            this._todasDemandasDash = snap.docs.map(d => d.data());
-
-            this._renderDashboard();
-
-            // Filtro de Coordenação
-            document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    this._dashCoordFilter = btn.getAttribute('data-coord');
-                    this._renderDashboard();
-                });
-            });
-
-            // Seletor do gráfico de barras
-            const barSelector = document.getElementById('barChartSelector');
-            if (barSelector) {
-                barSelector.addEventListener('change', (e) => {
-                    this._activeBarChart = e.target.value;
-                    this._renderBarChart();
-                });
-            }
-        } catch (error) {
-            console.error("❌ Erro ao carregar dashboard:", error);
+        let query = db.collection('demandas');
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
+        const snap = await query.get();
+        this._todasDemandasDash = snap.docs.map(d => d.data());
+
+        this._renderDashboard();
+
+        // Filtro de Coordenação
+        document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#coordFilterTabs .coord-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._dashCoordFilter = btn.getAttribute('data-coord');
+                this._renderDashboard();
+            });
+        });
+
+        // Seletor do gráfico de barras
+        document.getElementById('barChartSelector').addEventListener('change', (e) => {
+            this._activeBarChart = e.target.value;
+            this._renderBarChart();
+        });
     },
 
     _getDashDemandas() {
@@ -590,7 +427,6 @@ const app = {
     },
 
     _renderDashboard() {
-        console.log("📊 Renderizando Dashboard...");
         const demandas = this._getDashDemandas();
 
         let finalizadas = 0, andamento = 0, arquivadas = 0, aguardando = 0, aguardandoSede = 0;
@@ -613,31 +449,26 @@ const app = {
             setorCount[d.setor_nome] = (setorCount[d.setor_nome] || 0) + 1;
         });
 
-        const kpis = {
-            'kpi-total': demandas.length,
-            'kpi-finalizadas': finalizadas,
-            'kpi-andamento': andamento,
-            'kpi-arquivadas': arquivadas,
-            'kpi-aguardando': aguardando,
-            'kpi-aguardando-sede': aguardandoSede
-        };
+        document.getElementById('kpi-total').innerText = demandas.length;
+        document.getElementById('kpi-finalizadas').innerText = finalizadas;
+        document.getElementById('kpi-andamento').innerText = andamento;
+        document.getElementById('kpi-arquivadas').innerText = arquivadas;
+        const kpiAg = document.getElementById('kpi-aguardando');
+        const kpiAgSede = document.getElementById('kpi-aguardando-sede');
+        if (kpiAg) kpiAg.innerText = aguardando;
+        if (kpiAgSede) kpiAgSede.innerText = aguardandoSede;
 
-        Object.keys(kpis).forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerText = kpis[id];
-        });
-
+        // Armazena os datasets filtrados
         this._dashChartData = {
-            status: Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
-            tipo: Object.keys(tipoCount).map(k => ({label: k || 'S/N', value: tipoCount[k]})),
-            responsavel: Object.keys(respCount).map(k => ({label: k || 'S/N', value: respCount[k]})),
-            escola: Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
-            setor: Object.keys(setorCount).map(k => ({label: k || 'S/N', value: setorCount[k]}))
+            status:     Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
+            tipo:       Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),
+            responsavel:Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),
+            escola:     Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
+            setor:      Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]}))
         };
 
         this._renderStatusChart();
         this._renderBarChart();
-        console.log("✅ Dashboard renderizada com sucesso!");
     },
 
     _renderStatusChart() {
@@ -651,12 +482,12 @@ const app = {
         const data = (this._dashChartData || {})[key] || [];
 
         const titles = { setor: 'Por Setor', tipo: 'Por Tipo', responsavel: 'Por Responsável', escola: 'Por Escola' };
-        const icons = { setor: 'ri-layout-grid-line', tipo: 'ri-list-check', responsavel: 'ri-user-line', escola: 'ri-building-line' };
+        const icons  = { setor: 'ri-layout-grid-line', tipo: 'ri-list-check', responsavel: 'ri-user-line', escola: 'ri-building-line' };
 
         const titleEl = document.getElementById('barChartTitle');
-        const iconEl = document.getElementById('barChartIconBadge');
+        const iconEl  = document.getElementById('barChartIconBadge');
         if (titleEl) titleEl.innerText = titles[key] || key;
-        if (iconEl) iconEl.innerHTML = `<i class="${icons[key] || 'ri-bar-chart-horizontal-line'}"></i>`;
+        if (iconEl)  iconEl.innerHTML  = `<i class="${icons[key] || 'ri-bar-chart-horizontal-line'}"></i>`;
 
         this.renderHorizontalBarChart('chartBarCanvas', data);
     },
@@ -668,13 +499,14 @@ const app = {
         const ctx = canvas.getContext('2d');
         const labels = dataArr.map(d => d.label);
         const values = dataArr.map(d => d.value);
-        const total = values.reduce((s, v) => s + v, 0);
+        const total  = values.reduce((s, v) => s + v, 0);
 
         const vibrantColors = [
             '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
             '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7'
         ];
 
+        // Plugin para texto central
         const centerTextPlugin = {
             id: 'centerText',
             beforeDraw(chart) {
@@ -687,12 +519,17 @@ const app = {
                 ctx.save();
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
+
+                // Número grande
                 ctx.font = "bold 28px 'Inter', sans-serif";
                 ctx.fillStyle = '#1e293b';
                 ctx.fillText(total, cx, cy - 10);
+
+                // Rótulo menor
                 ctx.font = "500 11px 'Inter', sans-serif";
                 ctx.fillStyle = '#64748b';
                 ctx.fillText('demandas', cx, cy + 14);
+
                 ctx.restore();
             }
         };
@@ -760,10 +597,11 @@ const app = {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
 
+        // Ordena do maior para o menor
         const sorted = [...dataArr].sort((a, b) => b.value - a.value);
         const labels = sorted.map(d => d.label);
         const values = sorted.map(d => d.value);
-        const total = values.reduce((s, v) => s + v, 0);
+        const total  = values.reduce((s, v) => s + v, 0);
 
         const vibrantColors = [
             '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
@@ -798,7 +636,8 @@ const app = {
                                 return ` ${val} demandas (${pct}%)`;
                             }
                         }
-                    }
+                    },
+                    datalabels: false
                 },
                 scales: {
                     x: {
@@ -806,7 +645,10 @@ const app = {
                         grid: { color: '#f1f5f9' },
                         ticks: {
                             font: { family: "'Inter', sans-serif", size: 11 },
-                            callback: (val) => val
+                            callback: (val) => {
+                                const pct = total > 0 ? Math.round(val / total * 100) : 0;
+                                return val;
+                            }
                         }
                     },
                     y: {
@@ -843,28 +685,81 @@ const app = {
         });
     },
 
-    // ==========================================
-    // DEMANDAS
-    // ==========================================
+    renderChart(canvasId, dataArr, type) {
+        if (this.charts[canvasId]) this.charts[canvasId].destroy();
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const labels = dataArr.map(d => d.label);
+        const values = dataArr.map(d => d.value);
+
+        const vibrantColors = [
+            '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
+            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
+            '#06b6d4', '#a855f7'
+        ];
+
+        const isMultiColor = (type === 'pie' || type === 'doughnut' || type === 'polarArea');
+
+        this.charts[canvasId] = new Chart(ctx, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Quantidade',
+                    data: values,
+                    backgroundColor: labels.map((_, i) => vibrantColors[i % vibrantColors.length]),
+                    borderColor: isMultiColor ? '#fff' : 'transparent',
+                    borderWidth: isMultiColor ? 2 : 0,
+                    borderRadius: (!isMultiColor) ? 8 : 0,
+                    hoverOffset: isMultiColor ? 10 : 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 600, easing: 'easeInOutQuart' },
+                plugins: {
+                    legend: {
+                        position: isMultiColor ? 'right' : 'top',
+                        labels: {
+                            font: { family: "'Inter', sans-serif", size: 12 },
+                            padding: 16,
+                            usePointStyle: true,
+                            pointStyleWidth: 10
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.label}: ${ctx.parsed || ctx.raw} demandas`
+                        }
+                    }
+                },
+                scales: (!isMultiColor) ? {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { family: "'Inter', sans-serif" } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: "'Inter', sans-serif" }, maxRotation: 35, minRotation: 0 }
+                    }
+                } : {}
+            }
+        });
+    },
+
+    // --- DEMANDAS ---
     async initDemandas() {
-        console.log("📋 Inicializando lista de demandas...");
         await this.loadFiltrosDemandas();
         this.carregarDemandas();
         
-        const filterSearch = document.getElementById('filter-search');
-        if (filterSearch) filterSearch.addEventListener('input', () => this.filtrarTabelaDemandas());
-        
-        const filterCoord = document.getElementById('filter-coordenadoria');
-        if (filterCoord) filterCoord.addEventListener('change', () => this.filtrarTabelaDemandas());
-        
-        const filterEscola = document.getElementById('filter-escola');
-        if (filterEscola) filterEscola.addEventListener('change', () => this.filtrarTabelaDemandas());
-        
-        const filterTipo = document.getElementById('filter-tipo');
-        if (filterTipo) filterTipo.addEventListener('change', () => this.filtrarTabelaDemandas());
-        
-        const filterStatus = document.getElementById('filter-status');
-        if (filterStatus) filterStatus.addEventListener('change', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
+        document.getElementById('filter-status').addEventListener('change', () => this.filtrarTabelaDemandas());
     },
 
     async loadFiltrosDemandas() {
@@ -897,8 +792,7 @@ const app = {
         try {
             document.body.style.cursor = 'wait';
             let query = db.collection('demandas');
-            const filterArquivadas = document.getElementById('filter-arquivadas');
-            if(filterArquivadas && filterArquivadas.getAttribute('data-active') !== 'true') {
+            if(document.getElementById('filter-arquivadas').getAttribute('data-active') !== 'true') {
                 query = query.where('arquivada', '==', false);
             } else {
                 query = query.where('arquivada', '==', true);
@@ -908,6 +802,7 @@ const app = {
             
             const order = document.getElementById('filter-order') ? document.getElementById('filter-order').value : 'desc';
             
+            // Ordena
             demandas.sort((a, b) => {
                 const dateA = new Date(a.data_registro || 0);
                 const dateB = new Date(b.data_registro || 0);
@@ -941,9 +836,6 @@ const app = {
         return '#64748b';
     },
 
-    // ==========================================
-    // RENDERIZAÇÃO DA TABELA DE DEMANDAS
-    // ==========================================
     renderTabelaDemandas(demandas) {
         const theadTr = document.getElementById('demandas-thead-tr');
         if(theadTr) {
@@ -980,21 +872,21 @@ const app = {
 
                 tdHtml += `
                 <td>
-                    <button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>
-                    <button class="btn btn-sm btn-secondary" onclick="app.abrirModalDemandaEditar('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="app.confirmarExcluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
-                    <button class="btn btn-sm btn-success" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF"><i class="ri-file-pdf-2-line"></i></button>
-                    ${d.arquivada 
-                        ? `<button class="btn btn-sm btn-warning" onclick="app.confirmarDesarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
-                        : `<button class="btn btn-sm btn-secondary" onclick="app.confirmarArquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
-                    }
+                    ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
+                    ${this.temPermissao('editar_demandas') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>` : ''}
+                    ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
+                    ${this.temPermissao('imprimir_demandas') ? `<button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>` : ''}
+                    ${this.temPermissao('arquivar_demandas') ? (d.arquivada 
+                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
+                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
+                    ) : ''}
                 </td>
                 `;
                 tr.innerHTML = tdHtml;
                 tbody.appendChild(tr);
             } catch(e) { 
                 const errTr = document.createElement('tr');
-                errTr.innerHTML = `<td colspan="9" style="color:red;">Erro ao renderizar: ${e.message}</td>`;
+                errTr.innerHTML = `<td colspan="9" style="color:red;">Erro ao renderizar: ${e.message} - ${e.stack}</td>`;
                 tbody.appendChild(errTr);
                 console.error("Erro ao renderizar linha:", d, e); 
             }
@@ -1088,116 +980,211 @@ const app = {
         container.innerHTML = html;
     },
 
-    // ==========================================
-    // FUNÇÕES PARA BOTÕES DE AÇÃO
-    // ==========================================
+    async visualizarDemanda(id) {
+        const doc = await db.collection('demandas').doc(id).get();
+        if(!doc.exists) return;
+        const d = doc.data();
 
-    async abrirModalDemandaEditar(id) {
-        console.log("✏️ Editando demanda:", id);
-        try {
-            const doc = await db.collection('demandas').doc(id).get();
-            if (!doc.exists) {
-                await this.showAlert("Demanda não encontrada.");
-                return;
-            }
-            const d = doc.data();
-            d.id = doc.id;
-            this.openModalDemanda(d);
-        } catch (error) {
-            console.error("Erro ao editar demanda:", error);
-            await this.showAlert("Erro ao carregar dados para edição.");
-        }
+        // Busca o histórico de ações para incluir na ficha
+        const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
+        let acoes = acoesSnap.docs.map(a => a.data());
+        acoes.sort((a, b) => {
+            const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+            if(timeDiff !== 0) return timeDiff;
+            return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+        });
+
+        let html = `
+            <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                    <img src="assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
+                    <div style="text-align: center;">
+                        <h2 style="margin:0; font-size: 18px; color: #1e293b;">Sistema de Gestão de Demandas</h2>
+                        <h3 style="margin:2px 0; font-size: 14px; color: #475569; font-weight: normal;">Coordenadoria Regional de Educação de Manacapuru</h3>
+                        <h4 style="margin:10px 0 0 0; font-size: 16px; color: #0ea5e9;">Ficha da Demanda - Nº ${d.numero_registro || '-'}</h4>
+                    </div>
+                    <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
+                </div>
+                
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd; width: 30%;"><strong>Data de Registro:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${this.formatarDataBR(d.data_registro)}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Demandante:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.demandante_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Coordenação:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.coordenadoria_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Escola:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.escola_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Tipo da Demanda:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.tipo_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Status Atual:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.status_nome || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Processo SIGED:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.processo_siged || '-'}</td></tr>
+                    <tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>Responsável:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${d.funcionario_nome || '-'}</td></tr>
+                </table>
+                
+                <div style="margin-bottom: 20px; page-break-inside: avoid;">
+                    <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Descrição</h4>
+                    <p style="background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: pre-wrap;">${d.descricao || 'Sem descrição.'}</p>
+                </div>
+                
+                <h4 style="margin-bottom: 10px; color: #1e293b; border-bottom: 1px solid #eee;">Histórico de Ações</h4>
+                <table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;">
+                    <colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup>
+                    <thead>
+                        <tr style="background:#f1f5f9;">
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Data</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Ação</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Responsável</th>
+                            <th style="padding:8px; border:1px solid #ddd; text-align:left;">Status Mudou</th>
+                        </tr>
+                    </thead>
+                </table>
+                ${acoes.length === 0
+                    ? `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup><tbody><tr><td colspan="4" style="padding:8px; border:1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr></tbody></table>`
+                    : acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:60%"><col style="width:13%"><col style="width:12%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.status_nome || '-'}</td></tr></tbody></table>`).join('')
+                }
+            </div>
+        `;
+
+        this.openModal('Ficha da Demanda', html, [
+            { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() },
+            { label: 'Exportar PDF', class: 'btn-primary', action: () => {
+                const element = document.getElementById('ficha-demanda-pdf');
+                html2pdf().from(element).set({
+                    margin: 10,
+                    filename: `Demanda_${d.numero_registro.replace('/','_')}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).save();
+            } }
+        ]);
     },
 
-    async confirmarExcluirDemanda(id) {
-        console.log("🗑️ Solicitando exclusão da demanda:", id);
-        const confirmado = await this.showConfirm(
-            "Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda?\n\nEsta ação não pode ser desfeita!",
-            "Excluir",
-            "Cancelar",
-            true
-        );
-        if (confirmado) {
-            await this.excluirDemanda(id);
-        }
+    async exportExcel() {
+        let csvContent = "data:text/csv;charset=utf-8,";
+        const rows = window.todasDemandas;
+        if(rows.length === 0) { await this.showAlert('Sem dados para exportar'); return; }
+        
+        const header = Object.keys(rows[0]).join(";");
+        csvContent += header + "\r\n";
+        
+        rows.forEach(row => {
+            const values = Object.values(row).map(v => `"${(v||'').toString().replace(/"/g, '""')}"`);
+            csvContent += values.join(";") + "\r\n";
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "demandas.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     },
 
-    async confirmarArquivarDemanda(id) {
-        console.log("📦 Solicitando arquivamento da demanda:", id);
-        const confirmado = await this.showConfirm(
-            "Deseja arquivar esta demanda?",
-            "Arquivar",
-            "Cancelar",
-            false
-        );
-        if (confirmado) {
-            await this.arquivarDemanda(id);
-        }
+    async exportarRelatorioPDF() {
+        const rows = this.demandasFiltradas || [];
+        if (rows.length === 0) { await this.showAlert("Nenhuma demanda na tabela para exportar."); return; }
+
+        const colsVisiveis = this.colunasVisiveis.filter(c => c.show && c.key !== 'processo');
+
+        // Calcula larguras proporcionais para as colunas
+        const colWidths = colsVisiveis.map(c => {
+            if (c.key === 'numero') return '6%';
+            if (c.key === 'data') return '8%';
+            if (c.key === 'status') return '12%';
+            if (c.key === 'coordenacao') return '14%';
+            if (c.key === 'tipo') return '12%';
+            if (c.key === 'responsavel') return '13%';
+            if (c.key === 'escola') return '20%';
+            if (c.key === 'demandante') return '15%';
+            return '10%';
+        });
+
+        const colgroupHtml = colWidths.map(w => `<col style="width:${w}">`).join('');
+        const theadCols = colsVisiveis.map((c, i) =>
+            `<th style="padding:6px 8px; border:1px solid #ccc; background:#f1f5f9; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; width:${colWidths[i]}">${c.label}</th>`
+        ).join('');
+
+        // Cada linha vira sua própria <table> com page-break-inside:avoid
+        const rowTablesHtml = rows.map(d => {
+            const tds = colsVisiveis.map((c, i) => {
+                let val = '-';
+                switch(c.key) {
+                    case 'numero': val = d.numero_registro || '-'; break;
+                    case 'data': val = this.formatarDataBR(d.data_registro); break;
+                    case 'demandante': val = d.demandante_nome || '-'; break;
+                    case 'coordenacao': val = d.coordenadoria_nome || '-'; break;
+                    case 'escola': val = d.escola_nome || '-'; break;
+                    case 'tipo': val = d.tipo_nome || '-'; break;
+                    case 'status': val = d.status_nome || '-'; break;
+                    case 'responsavel': val = d.funcionario_nome || '-'; break;
+                    case 'processo': val = d.processo_siged || '-'; break;
+                }
+                return `<td style="padding:6px 8px; border:1px solid #ddd; font-size:10px; word-wrap:break-word; overflow-wrap:break-word; width:${colWidths[i]}">${val}</td>`;
+            }).join('');
+            return `<table style="width:100%; border-collapse:collapse; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup>${colgroupHtml}</colgroup><tbody><tr>${tds}</tr></tbody></table>`;
+        }).join('');
+
+        let htmlContent = `
+            <div id="relatorio-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color:#333;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0ea5e9; padding-bottom: 15px;">
+                    <img src="assets/img/logo.png" style="height: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'">
+                    <div style="text-align: center;">
+                        <h2 style="margin:0; font-size: 18px; color: #1e293b;">Sistema de Gestão de Demandas</h2>
+                        <h3 style="margin:2px 0; font-size: 14px; color: #475569; font-weight: normal;">Coordenadoria Regional de Educação de Manacapuru</h3>
+                        <h4 style="margin:10px 0 0 0; font-size: 16px; color: #0ea5e9;">Relatório de Demandas</h4>
+                        <p style="margin:5px 0 0 0; color: #64748b; font-size: 12px;">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <img src="assets/img/brasao.png" style="height: 60px; object-fit: contain;" alt="Brasão" onerror="this.style.display='none'">
+                </div>
+                <table style="width:100%; border-collapse:collapse; table-layout:fixed;"><colgroup>${colgroupHtml}</colgroup><thead><tr>${theadCols}</tr></thead></table>
+                ${rowTablesHtml}
+            </div>
+        `;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.left = '-9999px';
+        document.body.appendChild(tempDiv);
+
+        html2pdf().from(tempDiv.firstElementChild).set({
+            margin: 10,
+            filename: `Relatorio_Demandas_${Date.now()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        }).save().then(() => {
+            document.body.removeChild(tempDiv);
+        });
     },
 
-    async confirmarDesarquivarDemanda(id) {
-        console.log("📤 Solicitando desarquivamento da demanda:", id);
-        const confirmado = await this.showConfirm(
-            "Deseja desarquivar esta demanda?",
-            "Desarquivar",
-            "Cancelar",
-            false
-        );
-        if (confirmado) {
-            await this.desarquivarDemanda(id);
-        }
-    },
-
-    async excluirDemanda(id) {
-        console.log("🗑️ Excluindo demanda definitivamente:", id);
-        try {
-            await db.collection('demandas').doc(id).delete();
-            
-            const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
-            const batch = db.batch();
-            acoes.forEach(a => batch.delete(a.ref));
-            await batch.commit();
-            
-            await this.showAlert("Demanda excluída com sucesso!");
-            this.carregarDemandas();
-        } catch (error) {
-            console.error("Erro ao excluir demanda:", error);
-            await this.showAlert("Erro ao excluir demanda: " + error.message);
-        }
-    },
 
     async arquivarDemanda(id) {
-        console.log("📦 Arquivando demanda:", id);
-        try {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm('Arquivar esta demanda?', 'Arquivar', 'Cancelar', false)) {
             await db.collection('demandas').doc(id).update({ arquivada: true });
-            await this.showAlert("Demanda arquivada com sucesso!");
             this.carregarDemandas();
-        } catch (error) {
-            console.error("Erro ao arquivar demanda:", error);
-            await this.showAlert("Erro ao arquivar demanda.");
         }
     },
-
+    
     async desarquivarDemanda(id) {
-        console.log("📤 Desarquivando demanda:", id);
-        try {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm('Desarquivar esta demanda?', 'Desarquivar', 'Cancelar', false)) {
             await db.collection('demandas').doc(id).update({ arquivada: false });
-            await this.showAlert("Demanda desarquivada com sucesso!");
             this.carregarDemandas();
-        } catch (error) {
-            console.error("Erro ao desarquivar demanda:", error);
-            await this.showAlert("Erro ao desarquivar demanda.");
         }
     },
 
+    // Ações da Demanda
+    async verAcoes(id) {
+        // Obsoleto: Substituído por abrirDetalhesDemanda
+        this.abrirDetalhesDemanda(id);
+    },
+
+    // --- NOVA TELA DE DETALHES ---
     async excluirDemandaEVoltar(id) {
-        const confirmado = await this.showConfirm(
-            "Tem certeza que deseja excluir esta demanda definitivamente?",
-            "Excluir",
-            "Cancelar",
-            true
-        );
-        if (confirmado) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão."); return; }
+        if(await this.showConfirm("Tem certeza que deseja excluir esta demanda definitivamente?", "Excluir", "Cancelar")) {
             try {
                 await db.collection('demandas').doc(id).delete();
                 const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
@@ -1210,32 +1197,29 @@ const app = {
         }
     },
 
-    // ==========================================
-    // DETALHES DA DEMANDA COM AÇÕES CORRIGIDAS
-    // ==========================================
     async abrirDetalhesDemanda(id) {
-        console.log("📄 Abrindo detalhes da demanda:", id);
         document.body.style.cursor = 'wait';
         try {
             const doc = await db.collection('demandas').doc(id).get();
-            if(!doc.exists) {
-                await this.showAlert("Demanda não encontrada.");
-                document.body.style.cursor = 'default';
-                return;
-            }
+            if(!doc.exists) return;
             const d = doc.data();
             this.demandaAbertaId = id;
 
-            // Carrega o template
-            const template = document.getElementById('view-demanda-detalhe');
-            if (!template) {
-                console.error("❌ Template 'view-demanda-detalhe' não encontrado!");
-                document.body.style.cursor = 'default';
-                return;
-            }
-            document.getElementById('contentArea').innerHTML = template.innerHTML;
+            // Carrega o template primeiro
+            document.getElementById('contentArea').innerHTML = document.getElementById('view-demanda-detalhe').innerHTML;
 
-            // Preenche os dados
+            // Preenche dados
+            const actionsDiv = document.getElementById('detalhe-actions');
+            actionsDiv.innerHTML = `
+                <button class="btn btn-secondary" onclick="app.editarDemanda('${id}')"><i class="ri-edit-line"></i> Editar</button>
+                ${d.arquivada 
+                    ? `<button class="btn btn-secondary" onclick="app.desarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
+                    : `<button class="btn btn-secondary" onclick="app.arquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
+                }
+                <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
+                <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
+            `;
+
             document.getElementById('detalhe-numero').innerText = `Nº ${d.numero_registro || '-'}`;
             document.getElementById('detalhe-status').innerText = d.status_nome || 'SEM STATUS';
             document.getElementById('detalhe-status').className = 'badge badge-' + this.getBadgeColor(d.status_nome);
@@ -1248,92 +1232,18 @@ const app = {
             document.getElementById('detalhe-escola').innerText = d.escola_nome || '-';
             document.getElementById('detalhe-responsavel').innerText = d.funcionario_nome || '-';
 
-            // ==========================================
-            // BOTÕES DE AÇÃO DA DEMANDA
-            // ==========================================
-            const actionsDiv = document.getElementById('detalhe-actions');
-            if (actionsDiv) {
-                actionsDiv.innerHTML = `
-                    <button class="btn btn-secondary" onclick="app.abrirModalDemandaEditar('${id}')"><i class="ri-edit-line"></i> Editar</button>
-                    ${d.arquivada 
-                        ? `<button class="btn btn-secondary" onclick="app.confirmarDesarquivarDemanda('${id}'); setTimeout(() => app.abrirDetalhesDemanda('${id}'), 300);"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
-                        : `<button class="btn btn-secondary" onclick="app.confirmarArquivarDemanda('${id}'); setTimeout(() => app.abrirDetalhesDemanda('${id}'), 300);"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
-                    }
-                    <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
-                    <button class="btn btn-danger" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
-                `;
-            }
-
-            // Carrega os selects do form de ação
-            try {
-                const funcSnap = await db.collection('funcionarios').get();
-                const statSnap = await db.collection('status_atendimento').get();
-                const selResp = document.getElementById('detalhe-acao-responsavel');
-                const selStat = document.getElementById('detalhe-acao-status');
-                
-                if (selResp) {
-                    selResp.innerHTML = '<option value="">Selecione</option>' + 
-                        funcSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
-                }
-                if (selStat) {
-                    selStat.innerHTML = '<option value="">Selecione o status</option>' + 
-                        statSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
-                }
-                
-                const dataInput = document.getElementById('detalhe-acao-data');
-                if (dataInput) {
-                    dataInput.value = new Date().toISOString().split('T')[0];
-                }
-            } catch (error) {
-                console.error("❌ Erro ao carregar selects:", error);
-            }
-
-            // ==========================================
-            // BOTÃO DE NOVA AÇÃO
-            // ==========================================
-            const novaAcaoBtn = document.querySelector('.acoes-header .btn-primary');
-            if (novaAcaoBtn) {
-                novaAcaoBtn.onclick = () => {
-                    console.log("🖱️ Botão 'Nova Ação' clicado!");
-                    document.getElementById('detalhe-acao-form-container').style.display = 'block';
-                    document.getElementById('detalhe-acao-id').value = '';
-                    document.getElementById('detalhe-acao-descricao').value = '';
-                    
-                    // Rola para o formulário
-                    const formContainer = document.getElementById('detalhe-acao-form-container');
-                    if (formContainer) formContainer.scrollIntoView({ behavior: 'smooth' });
-                };
-            }
-
-            // ==========================================
-            // FORMULÁRIO DE AÇÃO - SUBMIT
-            // ==========================================
-            const acaoForm = document.getElementById('detalhe-acao-form');
-            if (acaoForm) {
-                acaoForm.onsubmit = (e) => {
-                    e.preventDefault();
-                    console.log("🖱️ Formulário de ação submetido!");
-                    this.salvarAcaoDetalhe();
-                };
-            }
-
-            // ==========================================
-            // BOTÃO CANCELAR DO FORM
-            // ==========================================
-            const cancelBtn = document.querySelector('.acoes-form-actions .btn-secondary');
-            if (cancelBtn) {
-                cancelBtn.onclick = () => {
-                    console.log("🖱️ Botão 'Cancelar' do formulário clicado!");
-                    document.getElementById('detalhe-acao-form-container').style.display = 'none';
-                };
-            }
+            // Selects do form de ação
+            const funcSnap = await db.collection('funcionarios').get();
+            const statSnap = await db.collection('status_atendimento').get();
+            const selResp = document.getElementById('detalhe-acao-responsavel');
+            const selStat = document.getElementById('detalhe-acao-status');
+            
+            selResp.innerHTML = '<option value="">Selecione</option>' + funcSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+            selStat.innerHTML = '<option value="">Selecione o status</option>' + statSnap.docs.map(x => `<option value="${x.data().nome}">${x.data().nome}</option>`).join('');
+            document.getElementById('detalhe-acao-data').value = new Date().toISOString().split('T')[0];
 
             await this.carregarAcoesDetalhe(id);
-            console.log("✅ Detalhes da demanda carregados com sucesso!");
-        } catch(e) { 
-            console.error("❌ Erro ao abrir detalhes:", e);
-            await this.showAlert("Erro ao carregar detalhes: " + e.message);
-        }
+        } catch(e) { console.error(e); }
         document.body.style.cursor = 'default';
     },
 
@@ -1341,272 +1251,296 @@ const app = {
         this.loadView('demandas');
     },
 
-    // ==========================================
-    // AÇÕES DA DEMANDA (CRUD)
-    // ==========================================
+    async abrirFormNovaAcao(isEdit = false) {
+        if(!isEdit && !this.temPermissao('criar_acoes')) { await this.showAlert("Sem permissão para criar ações"); return; }
+        document.getElementById('detalhe-acao-form-container').style.display = 'block';
+        document.getElementById('detalhe-acao-id').value = '';
+        document.getElementById('detalhe-acao-descricao').value = '';
+    },
+    fecharFormNovaAcao() {
+        document.getElementById('detalhe-acao-form-container').style.display = 'none';
+    },
+
     async carregarAcoesDetalhe(id) {
-        console.log("📋 Carregando ações para demanda:", id);
+        const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
+        let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        acoes.sort((a, b) => {
+            const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
+            if(timeDiff !== 0) return timeDiff;
+            return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
+        });
+
+        const tbody = document.getElementById('detalhe-acoes-tbody');
+        if(!tbody) return;
+
+        if(acoes.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma ação registrada.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = acoes.map(a => `
+            <tr>
+                <td>${this.formatarDataBR(a.data_acao)}</td>
+                <td>${a.descricao}</td>
+                <td>${a.funcionario_nome || '-'}</td>
+                <td>${a.status_nome ? `<span class="badge" style="background:var(--primary); color:white;">${a.status_nome}</span>` : '-'}</td>
+                <td>
+                    ${this.temPermissao('editar_acoes') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>` : ''}
+                    ${this.temPermissao('excluir_acoes') ? `<button class="btn btn-sm btn-danger-outline" onclick="app.excluirAcaoDetalhe('${a.id}')" title="Excluir Ação" style="padding:4px 8px;"><i class="ri-delete-bin-line"></i></button>` : ''}
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async editarAcaoDetalhe(idAcao) {
+        if(!this.temPermissao('editar_acoes')) { await this.showAlert("Sem permissão"); return; }
         try {
-            const snap = await db.collection('acoes').where('demanda_id', '==', id).get();
-            let acoes = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            acoes.sort((a, b) => {
-                const timeDiff = new Date(b.data_acao || 0) - new Date(a.data_acao || 0);
-                if(timeDiff !== 0) return timeDiff;
-                return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
-            });
+            const doc = await db.collection('acoes').doc(idAcao).get();
+            if(!doc.exists) return;
+            const a = doc.data();
 
-            const tbody = document.getElementById('detalhe-acoes-tbody');
-            if(!tbody) return;
-
-            if(acoes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Nenhuma ação registrada.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = acoes.map(a => `
-                <tr>
-                    <td>${this.formatarDataBR(a.data_acao)}</td>
-                    <td style="white-space: normal; word-wrap: break-word; max-width: 300px;">${a.descricao || '-'}</td>
-                    <td>${a.funcionario_nome || '-'}</td>
-                    <td>${a.status_nome ? `<span class="badge" style="background:var(--primary-color); color:white;">${a.status_nome}</span>` : '-'}</td>
-                    <td>
-                        <button class="btn btn-sm btn-secondary" onclick="app.editarAcaoDetalhe('${a.id}')" title="Editar Ação"><i class="ri-edit-line"></i></button>
-                        <button class="btn btn-sm btn-danger" onclick="app.confirmarExcluirAcaoDetalhe('${a.id}')" title="Excluir Ação"><i class="ri-delete-bin-line"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-        } catch (error) {
-            console.error("❌ Erro ao carregar ações:", error);
+            this.abrirFormNovaAcao(true);
+            document.getElementById('detalhe-acao-id').value = idAcao;
+            document.getElementById('detalhe-acao-data').value = a.data_acao;
+            document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
+            document.getElementById('detalhe-acao-descricao').value = a.descricao || '';
+            document.getElementById('detalhe-acao-status').value = a.status_nome || '';
+            
+            // Rola suavemente até o form
+            document.getElementById('detalhe-acao-form-container').scrollIntoView({ behavior: 'smooth' });
+        } catch(e) {
+            console.error(e);
         }
     },
 
     async salvarAcaoDetalhe() {
-        console.log("💾 Salvando ação...");
+        if(!this.temPermissao('criar_acoes') && !this.temPermissao('editar_acoes')) { await this.showAlert("Sem permissão"); return; }
+        
         const idAcao = document.getElementById('detalhe-acao-id').value;
         const dataAcao = document.getElementById('detalhe-acao-data').value;
         const resp = document.getElementById('detalhe-acao-responsavel').value;
         const desc = document.getElementById('detalhe-acao-descricao').value;
         const status = document.getElementById('detalhe-acao-status').value;
         
-        if (!dataAcao || !desc) {
-            await this.showAlert("Preencha todos os campos obrigatórios.");
-            return;
-        }
-
-        const btn = document.getElementById('btn-salvar-acao-detalhe');
-        if (btn) btn.innerText = 'Salvando...';
+        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Salvando...';
 
         try {
             const acaoData = {
                 demanda_id: this.demandaAbertaId,
                 data_acao: dataAcao,
                 criado_em: new Date().toISOString(),
-                funcionario_nome: resp || '-',
+                funcionario_nome: resp,
                 descricao: desc,
-                status_nome: status || '-'
+                status_nome: status
             };
 
             if(idAcao) {
                 await db.collection('acoes').doc(idAcao).update(acaoData);
-                console.log("✅ Ação atualizada!");
             } else {
                 await db.collection('acoes').add(acaoData);
-                console.log("✅ Ação criada!");
             }
 
             if(status) {
                 await db.collection('demandas').doc(this.demandaAbertaId).update({ status_nome: status });
-                console.log("✅ Status da demanda atualizado para:", status);
             }
 
-            document.getElementById('detalhe-acao-form-container').style.display = 'none';
+            this.fecharFormNovaAcao();
+            await this.abrirDetalhesDemanda(this.demandaAbertaId); // Recarrega tudo
+        } catch(e) {
+            console.error(e);
+            await this.showAlert("Erro ao salvar ação");
+        }
+        document.getElementById('btn-salvar-acao-detalhe').innerText = 'Registrar Ação';
+    },
+
+    async excluirAcaoDetalhe(idAcao) {
+        if(!this.temPermissao('excluir_acoes')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm("Excluir esta ação?", "Excluir", "Cancelar")) {
+            await db.collection('acoes').doc(idAcao).delete();
             await this.carregarAcoesDetalhe(this.demandaAbertaId);
-            await this.showAlert("Ação registrada com sucesso!");
-        } catch(e) {
-            console.error("❌ Erro ao salvar ação:", e);
-            await this.showAlert("Erro ao salvar ação: " + e.message);
-        }
-        
-        if (btn) btn.innerText = 'Registrar Ação';
-    },
-
-    async editarAcaoDetalhe(idAcao) {
-        console.log("✏️ Editando ação:", idAcao);
-        try {
-            const doc = await db.collection('acoes').doc(idAcao).get();
-            if(!doc.exists) {
-                await this.showAlert("Ação não encontrada.");
-                return;
-            }
-            const a = doc.data();
-
-            document.getElementById('detalhe-acao-form-container').style.display = 'block';
-            document.getElementById('detalhe-acao-id').value = idAcao;
-            document.getElementById('detalhe-acao-data').value = a.data_acao || '';
-            document.getElementById('detalhe-acao-responsavel').value = a.funcionario_nome || '';
-            document.getElementById('detalhe-acao-descricao').value = a.descricao || '';
-            document.getElementById('detalhe-acao-status').value = a.status_nome || '';
-            
-            const formContainer = document.getElementById('detalhe-acao-form-container');
-            if (formContainer) formContainer.scrollIntoView({ behavior: 'smooth' });
-        } catch(e) {
-            console.error("❌ Erro ao editar ação:", e);
-            await this.showAlert("Erro ao carregar ação para edição.");
         }
     },
 
-    async confirmarExcluirAcaoDetalhe(idAcao) {
-        console.log("🗑️ Solicitando exclusão da ação:", idAcao);
-        const confirmado = await this.showConfirm(
-            "Tem certeza que deseja excluir esta ação?",
-            "Excluir",
-            "Cancelar",
-            true
-        );
-        if (confirmado) {
-            try {
-                await db.collection('acoes').doc(idAcao).delete();
-                console.log("✅ Ação excluída!");
-                await this.carregarAcoesDetalhe(this.demandaAbertaId);
-                await this.showAlert("Ação excluída com sucesso!");
-            } catch (error) {
-                console.error("❌ Erro ao excluir ação:", error);
-                await this.showAlert("Erro ao excluir ação.");
-            }
-        }
-    },
-
-    // ==========================================
-    // MODAL DE DEMANDA (CRIAR/EDITAR)
-    // ==========================================
+    // Nova Demanda
     async openModalDemanda(d = null) {
-        console.log("📝 Abrindo modal de demanda:", d ? 'Editar' : 'Nova');
-        try {
-            const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
-            const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
-            const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
-            const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
-            const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
-            const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
-            const setores = (await db.collection('setores').get()).docs.map(d => d.data());
+        if(!this.temPermissao(d ? 'editar_demandas' : 'criar_demandas')) { await this.showAlert("Sem permissão"); return; }
 
-            const html = `
-                <form id="demandaForm">
-                    ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
+        const escolas = (await db.collection('escolas').get()).docs.map(d => d.data());
+        const tipos = (await db.collection('tipos_demanda').get()).docs.map(d => d.data());
+        const status = (await db.collection('status_atendimento').get()).docs.map(d => d.data());
+        const func = (await db.collection('funcionarios').get()).docs.map(d => d.data());
+        const dem = (await db.collection('demandantes').get()).docs.map(d => d.data());
+        const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
+        const setores = (await db.collection('setores').get()).docs.map(d => d.data());
+
+        const html = `
+            <form id="demandaForm">
+                ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
+                <div class="form-group">
+                    <label>Descrição</label>
+                    <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                    <div class="form-group" id="demandante-group">
+                        <label style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Demandante</span>
+                            <button type="button" id="btn-toggle-demandante"
+                                onclick="app.toggleDemandanteManual()"
+                                style="font-size:0.75rem; background:none; border:1px solid var(--primary-color); color:var(--primary-color); border-radius:20px; padding:2px 10px; cursor:pointer; white-space:nowrap;">
+                                <i class="ri-edit-line"></i> Digitar manualmente
+                            </button>
+                        </label>
+                        <select class="form-control" name="demandante_nome" id="demandante-select" required>
+                            <option value="">Selecione...</option>
+                            ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                        <input type="text" class="form-control" name="demandante_nome_manual" id="demandante-input"
+                            placeholder="Digite o nome do demandante..."
+                            value="${d && !dem.find(x => x.nome === d.demandante_nome) ? (d.demandante_nome || '') : ''}"
+                            style="display:none; margin-top:0;">
+                    </div>
                     <div class="form-group">
-                        <label>Descrição *</label>
-                        <textarea class="form-control" name="descricao" rows="3" required>${d ? (d.descricao||'') : ''}</textarea>
+                        <label>Coordenação</label>
+                        <select class="form-control" name="coordenadoria_nome" required>
+                            <option value="">Selecione...</option>
+                            ${coord.map(x => `<option value="${x.nome}" ${d && d.coordenadoria_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
                     </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-                        <div class="form-group">
-                            <label>Demandante *</label>
-                            <select class="form-control" name="demandante_nome" required>
-                                <option value="">Selecione...</option>
-                                ${dem.map(x => `<option value="${x.nome}" ${d && d.demandante_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Coordenação *</label>
-                            <select class="form-control" name="coordenadoria_nome" required>
-                                <option value="">Selecione...</option>
-                                ${coord.map(x => `<option value="${x.nome}" ${d && d.coordenadoria_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Escola</label>
-                            <select class="form-control" name="escola_nome">
-                                <option value="">Selecione...</option>
-                                ${escolas.map(x => `<option value="${x.nome}" ${d && d.escola_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Tipo</label>
-                            <select class="form-control" name="tipo_nome">
-                                <option value="">Selecione...</option>
-                                ${tipos.map(x => `<option value="${x.nome}" ${d && d.tipo_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Status Inicial</label>
-                            <select class="form-control" name="status_nome">
-                                <option value="">Selecione...</option>
-                                ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Setor</label>
-                            <select class="form-control" name="setor_nome">
-                                <option value="">Selecione...</option>
-                                ${setores.map(x => `<option value="${x.nome}" ${d && d.setor_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Responsável</label>
-                            <select class="form-control" name="funcionario_nome">
-                                <option value="">Selecione...</option>
-                                ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
-                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
-                                <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
-                                    ${d && d.processo_siged && d.processo_siged !== '-' ? 'checked' : ''}
-                                    onchange="document.getElementById('siged-box').style.display = this.checked ? 'block' : 'none'"
-                                    style="width:18px; height:18px; cursor:pointer;">
-                                Esta demanda possui número de processo SIGED
-                            </label>
-                        </div>
-                        <div class="form-group" id="siged-box" style="grid-column: 1 / -1; display: ${d && d.processo_siged && d.processo_siged !== '-' ? 'block' : 'none'}; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 15px;">
-                            <label style="font-weight:600; color:#1d4ed8;"><i class="ri-file-text-line"></i> Número do Processo SIGED</label>
-                            <input class="form-control" name="processo_siged" id="campo-siged"
-                                value="${d ? (d.processo_siged||'') : ''}"
-                                placeholder="Ex: 01600.016741/2024-30"
-                                style="margin-top:8px;">
-                        </div>
+                    <div class="form-group">
+                        <label>Escola</label>
+                        <select class="form-control" name="escola_nome">
+                            <option value="">Selecione...</option>
+                            ${escolas.map(x => `<option value="${x.nome}" ${d && d.escola_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
                     </div>
-                </form>
-            `;
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select class="form-control" name="tipo_nome">
+                            <option value="">Selecione...</option>
+                            ${tipos.map(x => `<option value="${x.nome}" ${d && d.tipo_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status Inicial</label>
+                        <select class="form-control" name="status_nome">
+                            <option value="">Selecione...</option>
+                            ${status.map(x => `<option value="${x.nome}" ${d && d.status_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Setor</label>
+                        <select class="form-control" name="setor_nome">
+                            <option value="">Selecione...</option>
+                            ${setores.map(x => `<option value="${x.nome}" ${d && d.setor_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Responsável</label>
+                        <select class="form-control" name="funcionario_nome">
+                            <option value="">Selecione...</option>
+                            ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
+                            <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
+                                ${d && d.processo_siged && d.processo_siged !== '-' ? 'checked' : ''}
+                                onchange="document.getElementById('siged-box').style.display = this.checked ? 'block' : 'none'"
+                                style="width:18px; height:18px; cursor:pointer;">
+                            Esta demanda possui número de processo SIGED
+                        </label>
+                    </div>
+                    <div class="form-group" id="siged-box" style="grid-column: 1 / -1; display: ${d && d.processo_siged && d.processo_siged !== '-' ? 'block' : 'none'}; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 15px;">
+                        <label style="font-weight:600; color:#1d4ed8;"><i class="ri-file-text-line"></i> Número do Processo SIGED</label>
+                        <input class="form-control" name="processo_siged" id="campo-siged"
+                            value="${d ? (d.processo_siged||'') : ''}"
+                            placeholder="Ex: 01600.016741/2024-30"
+                            style="margin-top:8px;">
+                    </div>
+                </div>
+            </form>
+        `;
 
-            this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
-                { label: 'Cancelar', class: 'btn-secondary', action: () => this.closeModal() },
-                { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
-            ]);
-        } catch (error) {
-            console.error("❌ Erro ao abrir modal:", error);
-            await this.showAlert("Erro ao carregar dados: " + error.message);
+        this.openModal(d ? 'Editar Demanda' : 'Nova Demanda', html, [
+            { label: 'Salvar', class: 'btn-primary', action: () => this.salvarDemanda(!!d) }
+        ]);
+
+        // Se estiver editando e o demandante não existir no banco (foi digitado manualmente),
+        // ativa automaticamente o modo manual
+        if (d && d.demandante_nome && !dem.find(x => x.nome === d.demandante_nome)) {
+            setTimeout(() => this.toggleDemandanteManual(true), 50);
+        }
+    },
+
+    toggleDemandanteManual(forcarManual = false) {
+        const sel = document.getElementById('demandante-select');
+        const inp = document.getElementById('demandante-input');
+        const btn = document.getElementById('btn-toggle-demandante');
+        if (!sel || !inp || !btn) return;
+
+        const modoManualAtivo = sel.style.display === 'none';
+
+        if (forcarManual || !modoManualAtivo) {
+            // Ativar modo manual
+            sel.style.display = 'none';
+            sel.removeAttribute('required');
+            sel.value = '';
+            inp.style.display = 'block';
+            inp.setAttribute('required', 'required');
+            btn.innerHTML = '<i class="ri-list-unordered"></i> Selecionar do banco';
+            btn.style.borderColor = 'var(--warning-color, #f59e0b)';
+            btn.style.color = 'var(--warning-color, #f59e0b)';
+            inp.focus();
+        } else {
+            // Voltar para o select
+            inp.style.display = 'none';
+            inp.removeAttribute('required');
+            inp.value = '';
+            sel.style.display = 'block';
+            sel.setAttribute('required', 'required');
+            btn.innerHTML = '<i class="ri-edit-line"></i> Digitar manualmente';
+            btn.style.borderColor = 'var(--primary-color)';
+            btn.style.color = 'var(--primary-color)';
         }
     },
 
     async salvarDemanda(isEdit) {
-        console.log("💾 Salvando demanda...");
         const form = document.getElementById('demandaForm');
-        if(!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-        const data = Object.fromEntries(new FormData(form));
-        
-        try {
-            if (isEdit) {
-                const id = data.id;
-                delete data.id;
-                await db.collection('demandas').doc(id).update(data);
-                console.log("✅ Demanda atualizada!");
-            } else {
-                data.arquivada = false;
-                data.data_registro = new Date().toISOString().split('T')[0];
-                data.numero_registro = await this.gerarNumeroDemanda();
-                await db.collection('demandas').add(data);
-                console.log("✅ Demanda criada!");
-            }
 
-            this.closeModal();
-            this.carregarDemandas();
-            await this.showAlert(isEdit ? "Demanda atualizada com sucesso!" : "Demanda criada com sucesso!");
-        } catch (error) {
-            console.error("❌ Erro ao salvar demanda:", error);
-            await this.showAlert("Erro ao salvar demanda: " + error.message);
+        // Se modo manual estiver ativo, transfere o valor do input para o campo que será salvo
+        const sel = document.getElementById('demandante-select');
+        const inp = document.getElementById('demandante-input');
+        if (sel && inp && sel.style.display === 'none') {
+            // Cria um campo oculto temporário com o nome correto para o FormData capturar
+            let hiddenField = form.querySelector('input[name="demandante_nome"]');
+            if (!hiddenField) {
+                hiddenField = document.createElement('input');
+                hiddenField.type = 'hidden';
+                hiddenField.name = 'demandante_nome';
+                form.appendChild(hiddenField);
+            }
+            hiddenField.value = inp.value.trim();
         }
+
+        if(!form.checkValidity()) return form.reportValidity();
+        const data = Object.fromEntries(new FormData(form));
+
+        // Remove o campo auxiliar manual (não deve ser salvo no banco)
+        delete data.demandante_nome_manual;
+        
+        if (isEdit) {
+            const id = data.id;
+            delete data.id;
+            await db.collection('demandas').doc(id).update(data);
+        } else {
+            data.arquivada = false;
+            data.data_registro = new Date().toISOString().split('T')[0];
+            data.numero_registro = await this.gerarNumeroDemanda();
+            await db.collection('demandas').add(data);
+        }
+
+        this.closeModal();
+        this.carregarDemandas();
     },
 
     async gerarNumeroDemanda() {
@@ -1636,7 +1570,8 @@ const app = {
     },
 
     async resetarContadorDemandas() {
-        if(await this.showConfirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\n\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
+        if(await this.showConfirm("ATENÇÃO: Deseja zerar o contador de número das Demandas? A próxima começará com 0001 do ano atual.\\n\\nIsso NÃO afeta nem exclui as demandas já existentes!")) {
             const anoAtual = new Date().getFullYear();
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: 0 });
             await this.showAlert("Contador resetado com sucesso! A próxima demanda será a 0001.");
@@ -1644,15 +1579,18 @@ const app = {
     },
 
     async renumerarTudo() {
-        if(!await this.showConfirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\n\nDeseja prosseguir?")) return;
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
+        if(!await this.showConfirm("ALERTA VERMELHO: Isso vai APAGAR a numeração atual de TODAS as demandas existentes na tabela e vai gerar números sequenciais (0001, 0002...) baseados na data de criação.\\n\\nDeseja prosseguir?")) return;
         
         try {
             document.body.style.cursor = 'wait';
             const anoAtual = new Date().getFullYear();
             
+            // Busca todas as demandas
             const snap = await db.collection('demandas').get();
             let demandas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
+            // Ordena da mais antiga para a mais nova, para numerar em ordem cronológica
             demandas.sort((a, b) => new Date(a.data_registro || 0) - new Date(b.data_registro || 0));
             
             const batch = db.batch();
@@ -1667,7 +1605,10 @@ const app = {
                 seq++;
             }
             
+            // Grava tudo no banco
             await batch.commit();
+            
+            // Atualiza o contador para a próxima ser a certa
             await db.collection('configuracoes').doc('contador_demandas').set({ ano: anoAtual, sequencia: seq - 1 });
             
             document.body.style.cursor = 'default';
@@ -1682,15 +1623,10 @@ const app = {
     },
 
     async gerarPdfDemandaNovaGuia(id) {
-        console.log("📄 Gerando PDF da demanda:", id);
         document.body.style.cursor = 'wait';
         try {
             const doc = await db.collection('demandas').doc(id).get();
-            if(!doc.exists) {
-                await this.showAlert("Demanda não encontrada.");
-                document.body.style.cursor = 'default';
-                return;
-            }
+            if(!doc.exists) return;
             const d = doc.data();
 
             const acoesSnap = await db.collection('acoes').where('demanda_id', '==', id).get();
@@ -1700,17 +1636,6 @@ const app = {
                 if(timeDiff !== 0) return timeDiff;
                 return new Date(b.criado_em || 0) - new Date(a.criado_em || 0);
             });
-
-            // Verifica se a biblioteca html2pdf está disponível
-            if (typeof html2pdf === 'undefined') {
-                console.warn("⚠️ html2pdf não carregado, tentando carregar...");
-                await new Promise((resolve) => {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                    script.onload = resolve;
-                    document.head.appendChild(script);
-                });
-            }
 
             let html = `
                 <div id="ficha-demanda-pdf" style="padding: 20px; font-family: 'Inter', sans-serif; color: #333;">
@@ -1752,7 +1677,7 @@ const app = {
                         </thead>
                     </table>
                     ${acoes.length
-                        ? acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td></tr></tbody></table>`).join('')
+                        ? acoes.map(a => `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${this.formatarDataBR(a.data_acao)} ${a.hora_acao || ''}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word; overflow-wrap:break-word;">${a.descricao || '-'}</td><td style="padding:8px; border:1px solid #ddd; word-wrap:break-word;">${a.funcionario_nome || '-'}</td></tr></tbody></table>`).join('')
                         : `<table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; margin-top:-1px; page-break-inside:avoid;"><colgroup><col style="width:15%"><col style="width:65%"><col style="width:20%"></colgroup><tbody><tr><td colspan="3" style="padding:8px; border:1px solid #ddd; text-align:center;">Nenhuma ação registrada.</td></tr></tbody></table>`
                     }
                 </div>
@@ -1776,15 +1701,36 @@ const app = {
             const pdfBlobUrl = await html2pdf().from(tempDiv.firstElementChild).set(opt).output('bloburl');
             window.open(pdfBlobUrl, '_blank');
             document.body.removeChild(tempDiv);
-            console.log("✅ PDF gerado com sucesso!");
         } catch (e) {
-            console.error("❌ Erro ao gerar PDF:", e);
-            await this.showAlert("Erro ao gerar PDF: " + e.message);
+            console.error("Erro ao gerar PDF:", e);
+            await this.showAlert("Erro ao gerar PDF.");
         }
         document.body.style.cursor = 'default';
     },
 
+    async excluirDemanda(id) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão para excluir demandas."); return; }
+        if(await this.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.", "Excluir", "Cancelar")) {
+            try {
+                await db.collection('demandas').doc(id).delete();
+                // Opcional: deletar o histórico de ações também
+                const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
+                const batch = db.batch();
+                acoes.forEach(a => batch.delete(a.ref));
+                await batch.commit();
+                
+                await this.showAlert("Demanda excluída com sucesso!");
+                this.carregarDemandas();
+            } catch(e) {
+                console.error("Erro ao excluir demanda:", e);
+                await this.showAlert("Erro ao excluir demanda.");
+            }
+        }
+    },
+
     async openModalImportar() {
+        if(!this.temPermissao('criar_demandas')) { await this.showAlert("Sem permissão"); return; }
+        
         const html = `
             <div class="alert alert-info" style="margin-bottom: 15px; padding: 15px; background: #e0f2fe; border-radius: 8px; color: #0369a1; border: 1px solid #bae6fd;">
                 <strong>Instruções de Importação:</strong><br>
@@ -1814,8 +1760,9 @@ const app = {
 
         for(let linha of linhas) {
             const cols = linha.split('\t');
-            if(cols.length < 8) continue;
+            if(cols.length < 8) continue; // Pula linhas inválidas ou curtas
 
+            // Parse da Data (de DD/MM/YYYY para YYYY-MM-DD)
             let dataFormated = cols[0].trim();
             if (dataFormated.includes('/')) {
                 const parts = dataFormated.split('/');
@@ -1831,8 +1778,10 @@ const app = {
             const arquivadaStr = cols[9]?.trim().toLowerCase() || 'não';
             const arquivada = (arquivadaStr === 'sim' || arquivadaStr === 'true');
 
+            // Gera numeração sequencial
             const numSequencial = await this.gerarNumeroDemanda();
 
+            // Salva a demanda
             await db.collection('demandas').add({
                 data_registro: dataFormated,
                 numero_registro: numSequencial,
@@ -1845,6 +1794,7 @@ const app = {
                 arquivada: arquivada
             });
 
+            // Auto-cadastrar nas tabelas base para preencher os dropdowns (se não existirem)
             await this.autoCadastrarBase('tipos_demanda', tipo);
             await this.autoCadastrarBase('status_atendimento', status);
             await this.autoCadastrarBase('escolas', escola);
@@ -1867,67 +1817,74 @@ const app = {
         }
     },
 
+    async editarDemanda(id) {
+        if(!this.temPermissao('editar_demandas')) { await this.showAlert("Sem permissão"); return; }
+        const doc = await db.collection('demandas').doc(id).get();
+        if(!doc.exists) { await this.showAlert("Demanda não encontrada."); return; }
+        const d = doc.data();
+        d.id = doc.id;
+        this.openModalDemanda(d);
+    },
+
+    // Utilidade para gerar cor fixa a partir de uma string
     getColorForText(str) {
         if (!str) return { bg: '#e2e8f0', color: '#475569' };
         let hash = 0;
         for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
         const colors = [
-            { bg: '#dbeafe', color: '#1e40af' },
-            { bg: '#dcfce7', color: '#166534' },
-            { bg: '#fef3c7', color: '#92400e' },
-            { bg: '#fee2e2', color: '#991b1b' },
-            { bg: '#f3e8ff', color: '#6b21a8' },
-            { bg: '#ffedd5', color: '#9a3412' },
-            { bg: '#e0e7ff', color: '#3730a3' }
+            { bg: '#dbeafe', color: '#1e40af' }, // azul
+            { bg: '#dcfce7', color: '#166534' }, // verde
+            { bg: '#fef3c7', color: '#92400e' }, // amarelo
+            { bg: '#fee2e2', color: '#991b1b' }, // vermelho
+            { bg: '#f3e8ff', color: '#6b21a8' }, // roxo
+            { bg: '#ffedd5', color: '#9a3412' }, // laranja
+            { bg: '#e0e7ff', color: '#3730a3' }  // indigo
         ];
         return colors[Math.abs(hash) % colors.length];
     },
 
-    // ==========================================
-    // KANBAN
-    // ==========================================
+    // --- KANBAN ---
     async initKanban() {
-        console.log("📊 Inicializando Kanban...");
         const board = document.getElementById('kanbanBoard');
         board.innerHTML = '';
         this.kanbanSortables.forEach(s => s.destroy());
         this.kanbanSortables = [];
 
-        try {
-            const statusSnap = await db.collection('status_atendimento').get();
-            const statusList = statusSnap.docs.map(d => d.data());
+        const statusSnap = await db.collection('status_atendimento').get();
+        const statusList = statusSnap.docs.map(d => d.data());
 
-            let query = db.collection('demandas').where('arquivada', '==', false);
-            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
-                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-            }
-            const demSnap = await query.get();
-            const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        let query = db.collection('demandas').where('arquivada', '==', false);
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
+        }
+        const demSnap = await query.get();
+        const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
 
-            statusList.forEach(s => {
-                const colDemandas = demandas.filter(d => d.status_nome == s.nome);
-                const col = document.createElement('div');
-                col.className = 'kanban-column';
-                col.innerHTML = `
-                    <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
-                    <div class="kanban-items" data-status="${s.nome}">
-                        ${colDemandas.map(d => {
-                            const coordColor = this.getColorForText(d.coordenadoria_nome);
-                            const tipoColor = this.getColorForText(d.tipo_nome);
-                            return `
-                            <div class="kanban-card" data-id="${d.id}" style="border-left: 4px solid var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color));">
-                                <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
-                                <div class="kanban-card-meta">
-                                    <span class="badge" style="background:${coordColor.bg}; color:${coordColor.color};">${d.coordenadoria_nome || '-'}</span> 
-                                    <span class="badge" style="background:${tipoColor.bg}; color:${tipoColor.color};">${d.tipo_nome || '-'}</span>
-                                </div>
+        statusList.forEach(s => {
+            const colDemandas = demandas.filter(d => d.status_nome == s.nome);
+            const col = document.createElement('div');
+            col.className = 'kanban-column';
+            col.innerHTML = `
+                <div class="kanban-header">${s.nome} <span>${colDemandas.length}</span></div>
+                <div class="kanban-items" data-status="${s.nome}">
+                    ${colDemandas.map(d => {
+                        const coordColor = this.getColorForText(d.coordenadoria_nome);
+                        const tipoColor = this.getColorForText(d.tipo_nome);
+                        return `
+                        <div class="kanban-card" data-id="${d.id}" style="border-left: 4px solid var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color));">
+                            <div class="kanban-card-title">#${d.numero_registro || d.id.substring(0,5)} - ${d.escola_nome || 'Sem escola'}</div>
+                            <div class="kanban-card-meta">
+                                <span class="badge" style="background:${coordColor.bg}; color:${coordColor.color};">${d.coordenadoria_nome || '-'}</span> 
+                                <span class="badge" style="background:${tipoColor.bg}; color:${tipoColor.color};">${d.tipo_nome || '-'}</span>
                             </div>
-                            `}).join('')}
-                    </div>
-                `;
-                board.appendChild(col);
-            });
+                        </div>
+                        `}).join('')}
+                </div>
+            `;
+            board.appendChild(col);
+        });
 
+        if(this.temPermissao('editar_demandas')) {
             document.querySelectorAll('.kanban-items').forEach(el => {
                 this.kanbanSortables.push(new Sortable(el, {
                     group: 'kanban',
@@ -1939,55 +1896,41 @@ const app = {
                         const demandaId = itemEl.getAttribute('data-id');
                         
                         await db.collection('demandas').doc(demandaId).update({ status_nome: newStatus });
-                        this.initKanban();
+                        this.initKanban(); // Recalcula totais
                     }
                 }));
             });
-            console.log("✅ Kanban inicializado com sucesso!");
-        } catch (error) {
-            console.error("❌ Erro ao iniciar Kanban:", error);
         }
     },
 
-    // ==========================================
-    // CALENDÁRIO
-    // ==========================================
+    // --- CALENDÁRIO ---
     async initCalendario() {
-        console.log("📅 Inicializando Calendário...");
-        try {
-            const container = document.getElementById('calendar-container');
-            let query = db.collection('demandas').where('arquivada', '==', false);
-            if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
-                query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
-            }
-            const snap = await query.get();
-            const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            
-            const events = demandas.filter(d => d.data_registro).map(d => ({
-                title: `#${d.numero_registro} ${d.escola_nome}`,
-                start: d.data_registro,
-                url: `javascript:app.abrirDetalhesDemanda('${d.id}')`,
-                backgroundColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`,
-                borderColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`
-            }));
-
-            this.calendar = new FullCalendar.Calendar(container, {
-                initialView: 'dayGridMonth',
-                locale: 'pt-br',
-                events: events
-            });
-            this.calendar.render();
-            console.log("✅ Calendário inicializado com sucesso!");
-        } catch (error) {
-            console.error("❌ Erro ao iniciar Calendário:", error);
+        const container = document.getElementById('calendar-container');
+        let query = db.collection('demandas').where('arquivada', '==', false);
+        if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome) {
+            query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
+        const snap = await query.get();
+        const demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        const events = demandas.filter(d => d.data_registro).map(d => ({
+            title: `#${d.numero_registro} ${d.escola_nome}`,
+            start: d.data_registro,
+            url: `javascript:app.abrirDetalhesDemanda('${d.id}')`,
+            backgroundColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`,
+            borderColor: `var(--${this.getBadgeColor(d.status_nome)}-color, var(--primary-color))`
+        }));
+
+        this.calendar = new FullCalendar.Calendar(container, {
+            initialView: 'dayGridMonth',
+            locale: 'pt-br',
+            events: events
+        });
+        this.calendar.render();
     },
 
-    // ==========================================
-    // CADASTROS
-    // ==========================================
+    // --- CADASTROS BASE ---
     async initCadastros() {
-        console.log("📋 Inicializando Cadastros...");
         const tabs = document.querySelectorAll('#cadastros-tabs li');
         tabs.forEach(t => t.addEventListener('click', (e) => {
             tabs.forEach(li => li.classList.remove('active'));
@@ -1999,40 +1942,37 @@ const app = {
 
     async loadCadastroTable(tabela) {
         window.currentCadastroTable = tabela;
-        try {
-            const snap = await db.collection(tabela).get();
-            const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            
-            const thead = document.getElementById('cadastro-thead');
-            const tbody = document.getElementById('cadastro-tbody');
-            thead.innerHTML = ''; tbody.innerHTML = '';
-            
-            if(data.length === 0) {
-                tbody.innerHTML = '<tr><td style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
-                return;
-            }
-
-            const keys = Object.keys(data[0]).filter(k => k !== 'id');
-            let ths = keys.map(k => `<th>${k}</th>`).join('');
-            thead.innerHTML = `<tr>${ths}<th>Ações</th></tr>`;
-
-            data.forEach(row => {
-                let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
-                tbody.innerHTML += `<tr>${tds}<td>
-                    <button class="btn btn-sm btn-secondary" onclick='app.editarCadastro(${JSON.stringify(row)})'><i class="ri-edit-line"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
-                </td></tr>`;
-            });
-        } catch (error) {
-            console.error("❌ Erro ao carregar cadastro:", error);
+        const snap = await db.collection(tabela).get();
+        const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        const thead = document.getElementById('cadastro-thead');
+        const tbody = document.getElementById('cadastro-tbody');
+        thead.innerHTML = ''; tbody.innerHTML = '';
+        
+        if(data.length === 0) {
+            tbody.innerHTML = '<tr><td>Nenhum registro encontrado.</td></tr>';
+            return;
         }
+
+        const keys = Object.keys(data[0]).filter(k => k !== 'id');
+        let ths = keys.map(k => `<th>${k}</th>`).join('');
+        thead.innerHTML = `<tr>${ths}<th>Ações</th></tr>`;
+
+        data.forEach(row => {
+            let tds = keys.map(k => `<td>${row[k]}</td>`).join('');
+            tbody.innerHTML += `<tr>${tds}<td>
+                <button class="btn btn-sm btn-secondary" onclick='app.editarCadastro(${JSON.stringify(row)})'><i class="ri-edit-line"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="app.deletarCadastro('${row.id}')"><i class="ri-delete-bin-line"></i></button>
+            </td></tr>`;
+        });
     },
 
     editarCadastro(row) {
         this.openModalCadastro(row);
     },
 
-    openModalCadastro(row = null) {
+    async openModalCadastro(row = null) {
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
         const tabela = window.currentCadastroTable;
         let html = `<form id="cadastroForm">`;
         if (row) html += `<input type="hidden" name="id" value="${row.id}">`;
@@ -2080,59 +2020,53 @@ const app = {
     },
 
     async deletarCadastro(id) {
+        if(!this.temPermissao('gerenciar_cadastros')) { await this.showAlert("Sem permissão"); return; }
         if(await this.showConfirm('Excluir este registro?', 'Excluir', 'Cancelar')) {
             await db.collection(window.currentCadastroTable).doc(id).delete();
             this.loadCadastroTable(window.currentCadastroTable);
         }
     },
 
-    // ==========================================
-    // USUARIOS
-    // ==========================================
+    // --- USUARIOS (ADM) ---
     async initUsuarios() {
-        console.log("👥 Inicializando Usuários...");
         const tbody = document.getElementById('usuarios-tbody');
         tbody.innerHTML = '';
-        try {
-            const snap = await db.collection('usuarios').get();
-            const usuarios = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        const snap = await db.collection('usuarios').get();
+        const usuarios = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        usuarios.forEach(u => {
+            const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
+            const btnReset = (u.login === 'admin' || u.metodo_login === 'google') ? '' : `<button class="btn btn-sm btn-warning" onclick="app.resetarSenhaUsuario('${u.email}', '${u.id}')" title="Enviar link de reset e forçar troca de senha"><i class="ri-mail-send-line"></i></button>`;
             
-            usuarios.forEach(u => {
-                const btnExcluir = u.login === 'admin' ? '' : `<button class="btn btn-sm btn-danger" onclick="app.deletarUsuario('${u.id}')"><i class="ri-delete-bin-line"></i></button>`;
-                const btnReset = (u.login === 'admin' || u.metodo_login === 'google') ? '' : `<button class="btn btn-sm btn-warning" onclick="app.resetarSenhaUsuario('${u.email}', '${u.id}')" title="Enviar link de reset e forçar troca de senha"><i class="ri-mail-send-line"></i></button>`;
+            let badges = '';
+            if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
+            else {
+                if(u.coordenadoria_nome) badges += `<span class="badge" style="background:#e0e7ff; color:#3730a3; margin-bottom: 5px;">${u.coordenadoria_nome}</span><br>`;
+                const p = u.permissoes || {};
+                const checkPerm = (val, label) => val ? `<span class="badge" style="background:#e2e8f0; color:#333; margin-top:2px;">${label}</span> ` : '';
                 
-                let badges = '';
-                if (u.role === 'ADM') badges = '<span class="badge badge-FINALIZADA">Acesso Total</span>';
-                else {
-                    if(u.coordenadoria_nome) badges += `<span class="badge" style="background:#e0e7ff; color:#3730a3; margin-bottom: 5px;">${u.coordenadoria_nome}</span><br>`;
-                    const p = u.permissoes || {};
-                    const checkPerm = (val, label) => val ? `<span class="badge" style="background:#e2e8f0; color:#333; margin-top:2px;">${label}</span> ` : '';
-                    
-                    badges += checkPerm(p.criar_demandas, 'Criar Dem');
-                    badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
-                    badges += checkPerm(p.editar_demandas, 'Edit Dem');
-                    badges += checkPerm(p.excluir_demandas, 'Exc Dem');
-                    badges += checkPerm(p.criar_acoes, 'Criar Ação');
-                    badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
-                }
+                badges += checkPerm(p.criar_demandas, 'Criar Dem');
+                badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
+                badges += checkPerm(p.editar_demandas, 'Edit Dem');
+                badges += checkPerm(p.excluir_demandas, 'Exc Dem');
+                badges += checkPerm(p.criar_acoes, 'Criar Ação');
+                badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
+            }
 
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${u.id.substring(0,5)}...</td>
-                    <td>${u.email}</td>
-                    <td>${u.role}</td>
-                    <td>${badges}</td>
-                    <td>
-                        ${btnReset}
-                        <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
-                        ${btnExcluir}
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } catch (error) {
-            console.error("❌ Erro ao carregar usuários:", error);
-        }
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${u.id.substring(0,5)}...</td>
+                <td>${u.email}</td>
+                <td>${u.role}</td>
+                <td>${badges}</td>
+                <td>
+                    ${btnReset}
+                    <button class="btn btn-sm btn-secondary" onclick='app.editarUsuario(${JSON.stringify(u)})'><i class="ri-edit-line"></i></button>
+                    ${btnExcluir}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
     },
 
     async resetarSenhaUsuario(email, userId) {
@@ -2270,7 +2204,7 @@ const app = {
                     });
                 } else {
                     const senha = fd.get('senha');
-                    if(!senha) await this.showAlert("Por favor, digite a senha inicial."); return;
+                    if(!senha) { await this.showAlert("Por favor, digite a senha inicial."); return; }
                     
                     const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
                     const res = await secondaryApp.auth().createUserWithEmailAndPassword(email, senha);
@@ -2302,11 +2236,152 @@ const app = {
         }
     },
 
-    // ==========================================
-    // CONTATOS
-    // ==========================================
+    // --- SETUP INICIAL FIREBASE ---
+    async setupFirebaseBase() {
+        try {
+            // Cria os status padrões
+            const statusList = ['EM ANDAMENTO', 'FINALIZADA', 'ARQUIVADA', 'Não Resolvido', 'Não se aplica'];
+            for(let s of statusList) { await db.collection('status_atendimento').add({ nome: s }); }
+            
+            // Cria tipos padrões
+            const tiposList = ['Elétrica', 'Hidráulica', 'Telhado', 'Forro', 'Poço Artesiano', 'Fossa Séptica'];
+            for(let t of tiposList) { await db.collection('tipos_demanda').add({ nome: t }); }
+            
+            // Cria conta Admin Inicial via Auth
+            // IMPORTANTE: Isso registrará admin@admin.com com a senha admin123
+            const cred = await auth.createUserWithEmailAndPassword('admin@admin.com', 'admin123');
+            
+            // Grava documento do admin
+            await db.collection('usuarios').doc(cred.user.uid).set({
+                login: 'admin',
+                email: 'admin@admin.com',
+                role: 'ADM',
+                permissoes: {}
+            });
+
+            await this.showAlert('Banco e Admin mestre configurados com sucesso! Entre usando email admin@admin.com e senha admin123');
+        } catch(e) {
+            await this.showAlert('Erro no setup: ' + e.message);
+        }
+    },
+
+    // --- MODAL BASE ---
+    openModal(title, html, buttons = []) {
+        document.getElementById('modalTitle').innerText = title;
+        document.getElementById('modalBody').innerHTML = html;
+        const footer = document.getElementById('modalFooter');
+        footer.innerHTML = '';
+        buttons.forEach(b => {
+            const btn = document.createElement('button');
+            btn.className = `btn ${b.class}`;
+            btn.innerText = b.label;
+            btn.onclick = b.action;
+            footer.appendChild(btn);
+        });
+        document.getElementById('globalModal').classList.add('active');
+    },
+
+    closeModal() {
+        document.getElementById('globalModal').classList.remove('active');
+    },
+
+    // =========================================
+    // CUSTOM POPUP (substitui alert/confirm nativos)
+    // =========================================
+
+    _popupResolve: null,
+
+    _getPopupType(msg) {
+        const m = (msg || '').toLowerCase();
+        if (m.includes('sucesso') || m.includes('importad') || m.includes('renumerad') || m.includes('configurad') || m.includes('enviada')) return 'success';
+        if (m.includes('erro') || m.includes('falha') || m.includes('negado')) return 'error';
+        if (m.includes('atenção') || m.includes('atencao') || m.includes('alerta') || m.includes('cuidado') || m.includes('resetad')) return 'warning';
+        if (m.includes('excluir') || m.includes('apagar') || m.includes('remover') || m.includes('deletar') || m.includes('deseja') || m.includes('certeza') || m.includes('zerar') || m.includes('renumerar')) return 'confirm';
+        return 'info';
+    },
+
+    _getPopupIcon(type) {
+        const icons = {
+            success: 'ri-checkbox-circle-fill',
+            error:   'ri-error-warning-fill',
+            warning: 'ri-alert-fill',
+            info:    'ri-information-fill',
+            confirm: 'ri-question-fill'
+        };
+        return icons[type] || icons.info;
+    },
+
+    _getPopupTitle(type) {
+        const titles = {
+            success: 'Sucesso',
+            error:   'Erro',
+            warning: 'Atenção',
+            info:    'Informação',
+            confirm: 'Confirmação'
+        };
+        return titles[type] || 'Aviso';
+    },
+
+    _showPopup(message, type, buttons) {
+        const overlay  = document.getElementById('customPopupOverlay');
+        const iconEl   = document.getElementById('customPopupIcon');
+        const titleEl  = document.getElementById('customPopupTitle');
+        const msgEl    = document.getElementById('customPopupMessage');
+        const actionsEl= document.getElementById('customPopupActions');
+        if (!overlay) { return; }
+
+        iconEl.className  = `custom-popup-icon popup-icon-${type}`;
+        iconEl.innerHTML  = `<i class="${this._getPopupIcon(type)}"></i>`;
+        titleEl.innerText = this._getPopupTitle(type);
+        msgEl.innerText   = message;
+
+        actionsEl.innerHTML = '';
+        buttons.forEach(b => {
+            const btn = document.createElement('button');
+            btn.className = `btn ${b.cls}`;
+            btn.innerText = b.label;
+            btn.onclick = () => {
+                overlay.classList.remove('active');
+                setTimeout(() => { if (this._popupResolve) { this._popupResolve(b.value); this._popupResolve = null; } }, 220);
+            };
+            actionsEl.appendChild(btn);
+        });
+
+        overlay.classList.add('active');
+
+        // Fecha ao clicar no fundo (apenas para alert, não confirm)
+        overlay._bgHandler = (e) => {
+            if (e.target === overlay && buttons.length === 1) {
+                overlay.classList.remove('active');
+                setTimeout(() => { if (this._popupResolve) { this._popupResolve(true); this._popupResolve = null; } }, 220);
+            }
+        };
+        overlay.addEventListener('click', overlay._bgHandler);
+    },
+
+    showAlert(message, typeOverride) {
+        return new Promise(resolve => {
+            this._popupResolve = resolve;
+            const type = typeOverride || this._getPopupType(message);
+            this._showPopup(message, type, [
+                { label: 'OK', cls: 'btn-popup-ok', value: true }
+            ]);
+        });
+    },
+
+    showConfirm(message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = true) {
+        return new Promise(resolve => {
+            this._popupResolve = resolve;
+            const type = this._getPopupType(message);
+            this._showPopup(message, type === 'info' ? 'confirm' : type, [
+                { label: cancelLabel,  cls: 'btn-popup-cancel', value: false },
+                { label: confirmLabel, cls: isDanger ? 'btn-popup-danger' : 'btn-popup-ok', value: true }
+            ]);
+        });
+    },
+
+
     async initContatos() {
-        console.log("📇 Inicializando Contatos...");
         try {
             document.body.style.cursor = 'wait';
             const snap = await db.collection('contatos').get();
@@ -2338,12 +2413,17 @@ const app = {
         }
 
         filtered.forEach(c => {
+            // Gera iniciais do avatar
             const partes = (c.nome || 'S N').trim().split(' ');
             const iniciais = (partes[0][0] + (partes[1] ? partes[1][0] : '')).toUpperCase();
 
+            // Gera cor baseada no nome
             const cores = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#6366f1'];
             const idx = (c.nome || '').charCodeAt(0) % cores.length;
             const cor = cores[idx];
+
+            const podeEditar = true;
+            const podeExcluir = this.temPermissao('gerenciar_cadastros') || this.userDoc.role === 'ADM';
 
             const emailLink = c.email
                 ? `<a href="mailto:${c.email}" class="contato-chip contato-chip-email" title="Enviar e-mail"><i class="ri-mail-line"></i> ${c.email}</a>`
@@ -2361,8 +2441,8 @@ const app = {
                 <div class="contato-card-header" style="--card-color: ${cor}">
                     <div class="contato-avatar" style="background: ${cor}">${iniciais}</div>
                     <div class="contato-card-actions">
-                        <button class="btn-icon" onclick='app.openModalContato(${JSON.stringify(c)})' title="Editar"><i class="ri-edit-line"></i></button>
-                        <button class="btn-icon btn-icon-danger" onclick="app.excluirContato('${c.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                        ${podeEditar ? `<button class="btn-icon" onclick='app.openModalContato(${JSON.stringify(c)})' title="Editar"><i class="ri-edit-line"></i></button>` : ''}
+                        ${podeExcluir ? `<button class="btn-icon btn-icon-danger" onclick="app.excluirContato('${c.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
                     </div>
                 </div>
                 <div class="contato-card-body">
@@ -2427,9 +2507,7 @@ const app = {
         }
     },
 
-    // ==========================================
-    // SUGESTOES
-    // ==========================================
+    // --- SUGESTOES ---
     async initSugestoes() {
         document.getElementById('sugestao-nome').value = this.userDoc.login || this.userDoc.email || '';
         document.getElementById('sugestao-texto').value = '';
@@ -2499,131 +2577,10 @@ const app = {
             await db.collection('sugestoes').doc(id).delete();
             this.carregarSugestoes();
         }
-    },
-
-    // ==========================================
-    // MODAL
-    // ==========================================
-    openModal(title, html, buttons = []) {
-        document.getElementById('modalTitle').innerText = title;
-        document.getElementById('modalBody').innerHTML = html;
-        const footer = document.getElementById('modalFooter');
-        footer.innerHTML = '';
-        buttons.forEach(b => {
-            const btn = document.createElement('button');
-            btn.className = `btn ${b.class}`;
-            btn.innerText = b.label;
-            btn.onclick = b.action;
-            footer.appendChild(btn);
-        });
-        document.getElementById('globalModal').classList.add('active');
-    },
-
-    closeModal() {
-        document.getElementById('globalModal').classList.remove('active');
-    },
-
-    // ==========================================
-    // ALERT / CONFIRM
-    // ==========================================
-    _popupResolve: null,
-
-    _getPopupType(msg) {
-        const m = (msg || '').toLowerCase();
-        if (m.includes('sucesso') || m.includes('importad') || m.includes('renumerad') || m.includes('configurad') || m.includes('enviada')) return 'success';
-        if (m.includes('erro') || m.includes('falha') || m.includes('negado')) return 'error';
-        if (m.includes('atenção') || m.includes('atencao') || m.includes('alerta') || m.includes('cuidado') || m.includes('resetad')) return 'warning';
-        if (m.includes('excluir') || m.includes('apagar') || m.includes('remover') || m.includes('deletar') || m.includes('deseja') || m.includes('certeza') || m.includes('zerar') || m.includes('renumerar')) return 'confirm';
-        return 'info';
-    },
-
-    _getPopupIcon(type) {
-        const icons = {
-            success: 'ri-checkbox-circle-fill',
-            error:   'ri-error-warning-fill',
-            warning: 'ri-alert-fill',
-            info:    'ri-information-fill',
-            confirm: 'ri-question-fill'
-        };
-        return icons[type] || icons.info;
-    },
-
-    _getPopupTitle(type) {
-        const titles = {
-            success: 'Sucesso',
-            error:   'Erro',
-            warning: 'Atenção',
-            info:    'Informação',
-            confirm: 'Confirmação'
-        };
-        return titles[type] || 'Aviso';
-    },
-
-    _showPopup(message, type, buttons) {
-        const overlay  = document.getElementById('customPopupOverlay');
-        const iconEl   = document.getElementById('customPopupIcon');
-        const titleEl  = document.getElementById('customPopupTitle');
-        const msgEl    = document.getElementById('customPopupMessage');
-        const actionsEl= document.getElementById('customPopupActions');
-        if (!overlay) { return; }
-
-        iconEl.className  = `custom-popup-icon popup-icon-${type}`;
-        iconEl.innerHTML  = `<i class="${this._getPopupIcon(type)}"></i>`;
-        titleEl.innerText = this._getPopupTitle(type);
-        msgEl.innerText   = message;
-
-        actionsEl.innerHTML = '';
-        buttons.forEach(b => {
-            const btn = document.createElement('button');
-            btn.className = `btn ${b.cls}`;
-            btn.innerText = b.label;
-            btn.onclick = () => {
-                overlay.classList.remove('active');
-                setTimeout(() => { if (this._popupResolve) { this._popupResolve(b.value); this._popupResolve = null; } }, 220);
-            };
-            actionsEl.appendChild(btn);
-        });
-
-        overlay.classList.add('active');
-
-        overlay._bgHandler = (e) => {
-            if (e.target === overlay && buttons.length === 1) {
-                overlay.classList.remove('active');
-                setTimeout(() => { if (this._popupResolve) { this._popupResolve(true); this._popupResolve = null; } }, 220);
-            }
-        };
-        overlay.addEventListener('click', overlay._bgHandler);
-    },
-
-    showAlert(message, typeOverride) {
-        return new Promise(resolve => {
-            this._popupResolve = resolve;
-            const type = typeOverride || this._getPopupType(message);
-            this._showPopup(message, type, [
-                { label: 'OK', cls: 'btn-popup-ok', value: true }
-            ]);
-        });
-    },
-
-    showConfirm(message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = true) {
-        return new Promise(resolve => {
-            this._popupResolve = resolve;
-            const type = this._getPopupType(message);
-            this._showPopup(message, type === 'info' ? 'confirm' : type, [
-                { label: cancelLabel,  cls: 'btn-popup-cancel', value: false },
-                { label: confirmLabel, cls: isDanger ? 'btn-popup-danger' : 'btn-popup-ok', value: true }
-            ]);
-        });
     }
 };
 
-// ==========================================
-// INICIALIZAÇÃO
-// ==========================================
-window.onload = () => {
-    console.log("📄 Página carregada, iniciando app...");
-    window.app = app;
-    app.init();
-};
+window.onload = () => app.init();
 
-console.log("✅ app.js carregado com sucesso!");
+
+
