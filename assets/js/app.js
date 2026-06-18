@@ -407,14 +407,15 @@ const app = {
         }
 
         const initMap = {
-            'dashboard':  () => this.initDashboard(),
-            'demandas':   () => this.initDemandas(),
-            'kanban':     () => this.initKanban(),
-            'calendario': () => this.initCalendario(),
-            'cadastros':  () => this.initCadastros(),
-            'usuarios':   () => this.initUsuarios(),
-            'contatos':   () => this.initContatos(),
-            'sugestoes':  () => this.initSugestoes(),
+            'dashboard':       () => this.initDashboard(),
+            'demandas':        () => this.initDemandas(),
+            'kanban':          () => this.initKanban(),
+            'calendario':      () => this.initCalendario(),
+            'cadastros':       () => this.initCadastros(),
+            'usuarios':        () => this.initUsuarios(),
+            'contatos':        () => this.initContatos(),
+            'sugestoes':       () => this.initSugestoes(),
+            'demanda-detalhe': () => this.abrirDetalhesDemanda(this.demandaAbertaId),
         };
 
         const initFn = initMap[view];
@@ -1247,11 +1248,12 @@ const app = {
 
     async abrirDetalhesDemanda(id) {
         document.body.style.cursor = 'wait';
+        this.currentView = 'demanda-detalhe';
+        this.demandaAbertaId = id;
         try {
             const doc = await db.collection('demandas').doc(id).get();
             if(!doc.exists) return;
             const d = doc.data();
-            this.demandaAbertaId = id;
 
             // Carrega o template primeiro
             document.getElementById('contentArea').innerHTML = document.getElementById('view-demanda-detalhe').innerHTML;
