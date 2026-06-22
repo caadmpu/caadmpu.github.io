@@ -330,6 +330,13 @@ const app = {
         return !!(this.userDoc.permissoes && this.userDoc.permissoes[acao]);
     },
 
+    // Verifica se o usuário pode ver demandas sigilosas
+    podeVerSigilosa() {
+        if (!this.userDoc) return false;
+        if (this.userDoc.role === 'ADM') return true;
+        return !!(this.userDoc.permissoes && this.userDoc.permissoes.ver_sigilosas);
+    },
+
     startClock() {
         setInterval(() => {
             const now = new Date();
@@ -443,12 +450,24 @@ const app = {
     async initDashboard() {
         this._dashCoordFilter = 'TODAS'; // Estado do filtro de coordenação
 
+        // Carrega os status cadastrados para KPIs dinâmicos
+        try {
+            const statusSnap = await db.collection('status_atendimento').get();
+            this._dashStatusList = statusSnap.docs.map(d => d.data().nome).filter(Boolean);
+        } catch(e) {
+            this._dashStatusList = [];
+        }
+
         let query = db.collection('demandas');
         if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {
             query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
         const snap = await query.get();
-        this._todasDemandasDash = snap.docs.map(d => d.data());
+        // Filtra sigilosas se o usuário não tem permissão
+        this._todasDemandasDash = snap.docs.map(d => d.data()).filter(d => {
+            if (d.sigilosa) return this.podeVerSigilosa();
+            return true;
+        });
 
         this._renderDashboard();
 
@@ -463,7 +482,8 @@ const app = {
         });
 
         // Seletor do gráfico de barras
-        document.getElementById('barChartSelector').addEventListener('change', (e) => {
+        const barSel = document.getElementById('barChartSelector');
+        if (barSel) barSel.addEventListener('change', (e) => {
             this._activeBarChart = e.target.value;
             this._renderBarChart();
         });
@@ -475,45 +495,118 @@ const app = {
         return all.filter(d => (d.coordenadoria_nome || '').toUpperCase().includes(this._dashCoordFilter.toUpperCase()));
     },
 
+    // Mapa de ícones e cores para status conhecidos
+    _getStatusKpiConfig(statusNome) {
+        const sn = (statusNome || '').toUpperCase().trim();
+        const configs = [
+            { match: sn => sn === 'FINALIZADA',                         icon: 'ri-checkbox-circle-line',   bg: '#10b981' },
+            { match: sn => sn === 'EM ANDAMENTO',                        icon: 'ri-time-line',               bg: '#f59e0b' },
+            { match: sn => sn.includes('AGUARDANDO') && sn.includes('SEDE'), icon: 'ri-building-2-line',    bg: '#8b5cf6' },
+            { match: sn => sn.includes('AGUARDANDO'),                    icon: 'ri-user-received-line',      bg: '#3b82f6' },
+            { match: sn => sn.includes('SIGED') || sn.includes('TRAMI'), icon: 'ri-file-text-line',         bg: '#06b6d4' },
+            { match: sn => sn.includes('TREINAMENTO'),                   icon: 'ri-graduation-cap-line',    bg: '#6366f1' },
+            { match: sn => sn.includes('CANCELAD'),                      icon: 'ri-close-circle-line',       bg: '#ef4444' },
+            { match: sn => sn.includes('PENDENTE'),                      icon: 'ri-error-warning-line',      bg: '#f97316' },
+            { match: sn => sn.includes('ABERTA'),                        icon: 'ri-folder-open-line',        bg: '#14b8a6' },
+        ];
+        const fallbackColors = ['#0ea5e9','#84cc16','#a855f7','#ec4899','#f59e0b','#10b981','#06b6d4','#6366f1','#ef4444'];
+        for (const cfg of configs) {
+            if (cfg.match(sn)) return { icon: cfg.icon, bg: cfg.bg };
+        }
+        // Cor automática baseada em hash do nome
+        let hash = 0;
+        for (let i = 0; i < statusNome.length; i++) hash = statusNome.charCodeAt(i) + ((hash << 5) - hash);
+        return { icon: 'ri-file-list-line', bg: fallbackColors[Math.abs(hash) % fallbackColors.length] };
+    },
+
     _renderDashboard() {
         const demandas = this._getDashDemandas();
+        const statusList = this._dashStatusList || [];
 
-        let finalizadas = 0, andamento = 0, arquivadas = 0, aguardando = 0, aguardandoSede = 0;
-        const statusCount = {}, tipoCount = {}, respCount = {}, escolaCount = {}, setorCount = {};
+        // Contagem por status e outros agrupamentos
+        let totalGeral = demandas.length;
+        let arquivadas = 0;
+        const statusCount = {}; // inclui arquivadas via label especial
+        const tipoCount = {}, respCount = {}, escolaCount = {}, setorCount = {};
+
+        // Inicializa contagem de todos os status conhecidos com 0
+        statusList.forEach(s => { statusCount[s] = 0; });
 
         demandas.forEach(d => {
             if (d.arquivada) {
                 arquivadas++;
+                // Conta arquivadas no gráfico de status
+                statusCount['ARQUIVADAS'] = (statusCount['ARQUIVADAS'] || 0) + 1;
             } else {
-                const sn = (d.status_nome || '').toUpperCase();
-                if (sn === 'FINALIZADA') finalizadas++;
-                if (sn === 'EM ANDAMENTO') andamento++;
-                if (sn === 'AGUARDANDO ATENDIMENTO') aguardando++;
-                if (sn.includes('AGUARDANDO') && sn.includes('SEDE')) aguardandoSede++;
+                const sn = d.status_nome || 'Sem Status';
+                statusCount[sn] = (statusCount[sn] || 0) + 1;
             }
-            statusCount[d.status_nome] = (statusCount[d.status_nome] || 0) + 1;
             tipoCount[d.tipo_nome] = (tipoCount[d.tipo_nome] || 0) + 1;
             respCount[d.funcionario_nome] = (respCount[d.funcionario_nome] || 0) + 1;
             escolaCount[d.escola_nome] = (escolaCount[d.escola_nome] || 0) + 1;
             setorCount[d.setor_nome] = (setorCount[d.setor_nome] || 0) + 1;
         });
 
-        document.getElementById('kpi-total').innerText = demandas.length;
-        document.getElementById('kpi-finalizadas').innerText = finalizadas;
-        document.getElementById('kpi-andamento').innerText = andamento;
-        document.getElementById('kpi-arquivadas').innerText = arquivadas;
-        const kpiAg = document.getElementById('kpi-aguardando');
-        const kpiAgSede = document.getElementById('kpi-aguardando-sede');
-        if (kpiAg) kpiAg.innerText = aguardando;
-        if (kpiAgSede) kpiAgSede.innerText = aguardandoSede;
+        // ==== KPIs DINÂMICOS ====
+        const kpiContainer = document.getElementById('dashboard-kpis-container');
+        if (kpiContainer) {
+            let kpiHtml = '';
+
+            // Card 1: Total de Demandas (sempre primeiro)
+            kpiHtml += `
+                <div class="kpi-card">
+                    <div class="kpi-icon box-primary"><i class="ri-file-copy-2-line"></i></div>
+                    <div class="kpi-data">
+                        <h3>DEMANDAS</h3>
+                        <div class="kpi-value">${totalGeral}</div>
+                    </div>
+                </div>
+            `;
+
+            // Cards por status cadastrado no banco
+            statusList.forEach(statusNome => {
+                const count = statusCount[statusNome] || 0;
+                const cfg = this._getStatusKpiConfig(statusNome);
+                // Abreviação para label longo
+                let label = statusNome.toUpperCase();
+                if (label.length > 20) label = label.substring(0, 18) + '…';
+                kpiHtml += `
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:${cfg.bg};"><i class="${cfg.icon}"></i></div>
+                        <div class="kpi-data">
+                            <h3 title="${statusNome}">${label}</h3>
+                            <div class="kpi-value">${count}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Card Arquivadas (sempre por último)
+            kpiHtml += `
+                <div class="kpi-card">
+                    <div class="kpi-icon box-secondary"><i class="ri-inbox-archive-line"></i></div>
+                    <div class="kpi-data">
+                        <h3>ARQUIVADAS</h3>
+                        <div class="kpi-value">${arquivadas}</div>
+                    </div>
+                </div>
+            `;
+
+            kpiContainer.innerHTML = kpiHtml;
+        }
 
         // Armazena os datasets filtrados
+        // Para o gráfico de status: filtra zeros e inclui arquivadas
+        const statusChartData = Object.keys(statusCount)
+            .filter(k => statusCount[k] > 0)
+            .map(k => ({label: k || 'S/N', value: statusCount[k]}));
+
         this._dashChartData = {
-            status:     Object.keys(statusCount).map(k => ({label: k || 'S/N', value: statusCount[k]})),
-            tipo:       Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),
-            responsavel:Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),
-            escola:     Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
-            setor:      Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]}))
+            status:      statusChartData,
+            tipo:        Object.keys(tipoCount).map(k   => ({label: k || 'S/N', value: tipoCount[k]})),
+            responsavel: Object.keys(respCount).map(k   => ({label: k || 'S/N', value: respCount[k]})),
+            escola:      Object.keys(escolaCount).map(k => ({label: k || 'S/N', value: escolaCount[k]})),
+            setor:       Object.keys(setorCount).map(k  => ({label: k || 'S/N', value: setorCount[k]}))
         };
 
         this._renderStatusChart();
@@ -902,12 +995,15 @@ const app = {
         demandas.forEach(d => {
             try {
                 const tr = document.createElement('tr');
+                if (d.sigilosa) tr.classList.add('row-sigilosa');
                 const cssStatus = (typeof d.status_nome === 'string') ? d.status_nome.replace(/\s+/g, '-').toUpperCase() : '';
                 
                 let tdHtml = '';
                 this.colunasVisiveis.filter(c => c.show).forEach(c => {
                     switch(c.key) {
-                        case 'numero': tdHtml += `<td>${d.numero_registro || '-'}</td>`; break;
+                        case 'numero': 
+                            tdHtml += `<td>${d.numero_registro || '-'}${d.sigilosa ? ' <span class="badge-sigilosa"><i class="ri-lock-line"></i>SIGILOSA</span>' : ''}</td>`; 
+                            break;
                         case 'data': tdHtml += `<td>${this.formatarDataBR(d.data_registro)}</td>`; break;
                         case 'demandante': tdHtml += `<td>${d.demandante_nome || '-'}</td>`; break;
                         case 'coordenacao': tdHtml += `<td>${d.coordenadoria_nome || '-'}</td>`; break;
@@ -951,6 +1047,9 @@ const app = {
         const coord = document.getElementById('filter-coordenadoria').value;
         
         let filtradas = window.todasDemandas.filter(d => {
+            // Filtro de demandas sigilosas
+            if (d.sigilosa && !this.podeVerSigilosa()) return false;
+
             const matchTerm = Object.values(d).join(' ').toLowerCase().includes(term);
             const strProc = (d.processo_siged || '').toString().trim().toLowerCase();
             const isInvalid = strProc === '' || strProc === '-' || strProc === 's/n' || strProc === 'n/a' || strProc === 'não' || strProc === 'nao';
@@ -1255,6 +1354,14 @@ const app = {
             if(!doc.exists) return;
             const d = doc.data();
 
+            // Bloqueia acesso a demandas sigilosas para quem não tem permissão
+            if (d.sigilosa && !this.podeVerSigilosa()) {
+                document.body.style.cursor = 'default';
+                await this.showAlert('🔒 Acesso Negado: Esta é uma Demanda Sigilosa. Você não possui permissão para visualizá-la.');
+                this.voltarDemandas();
+                return;
+            }
+
             // Carrega o template primeiro
             document.getElementById('contentArea').innerHTML = document.getElementById('view-demanda-detalhe').innerHTML;
 
@@ -1423,6 +1530,10 @@ const app = {
         const coord = (await db.collection('coordenadorias').get()).docs.map(d => d.data());
         const setores = (await db.collection('setores').get()).docs.map(d => d.data());
 
+        // Checkbox sigilosa só aparece para ADM ou quem tem ver_sigilosas
+        const podeMarcaSigilosa = this.podeVerSigilosa();
+        const isSigilosa = !!(d && d.sigilosa);
+
         const html = `
             <form id="demandaForm">
                 ${d ? `<input type="hidden" name="id" value="${d.id}">` : ''}
@@ -1491,6 +1602,18 @@ const app = {
                             ${func.map(x => `<option value="${x.nome}" ${d && d.funcionario_nome === x.nome ? 'selected' : ''}>${x.nome}</option>`).join('')}
                         </select>
                     </div>
+
+                    ${podeMarcaSigilosa ? `
+                    <div class="sigilosa-form-block" style="grid-column: 1 / -1;">
+                        <div class="sigilosa-form-icon"><i class="ri-lock-password-line"></i></div>
+                        <div class="sigilosa-form-text">
+                            <strong>Demanda Sigilosa</strong>
+                            <span>Somente o administrador e usuários autorizados poderão visualizar ou editar esta demanda.</span>
+                        </div>
+                        <input type="checkbox" class="sigilosa-checkbox" name="sigilosa" id="chk-sigilosa" value="1" ${isSigilosa ? 'checked' : ''}>
+                    </div>
+                    ` : ''}
+
                     <div class="form-group" style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 5px;">
                         <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
                             <input type="checkbox" id="toggle-siged" name="tem_siged" value="1"
@@ -1575,8 +1698,13 @@ const app = {
         if(!form.checkValidity()) return form.reportValidity();
         const data = Object.fromEntries(new FormData(form));
 
+        // Trata o campo sigilosa (checkbox retorna '1' quando marcado, ausente quando desmarcado)
+        data.sigilosa = data.sigilosa === '1';
+
         // Remove o campo auxiliar manual (não deve ser salvo no banco)
         delete data.demandante_nome_manual;
+        // Remove campo auxiliar SIGED toggle
+        delete data.tem_siged;
         
         if (isEdit) {
             const id = data.id;
@@ -1872,6 +2000,11 @@ const app = {
         const doc = await db.collection('demandas').doc(id).get();
         if(!doc.exists) { await this.showAlert("Demanda não encontrada."); return; }
         const d = doc.data();
+        // Bloqueia edição de demandas sigilosas para quem não tem permissão
+        if (d.sigilosa && !this.podeVerSigilosa()) {
+            await this.showAlert('🔒 Acesso Negado: Esta é uma Demanda Sigilosa. Você não possui permissão para editá-la.');
+            return;
+        }
         d.id = doc.id;
         this.openModalDemanda(d);
     },
@@ -1908,7 +2041,9 @@ const app = {
             query = query.where('coordenadoria_nome', '==', this.userDoc.coordenadoria_nome);
         }
         const demSnap = await query.get();
-        const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        // Filtra sigilosas para quem não tem permissão
+        const demandas = demSnap.docs.map(d => ({id: d.id, ...d.data()}))
+            .filter(d => d.sigilosa ? this.podeVerSigilosa() : true);
 
         statusList.forEach(s => {
             const colDemandas = demandas.filter(d => d.status_nome == s.nome);
@@ -2098,6 +2233,7 @@ const app = {
                 badges += checkPerm(p.criar_demandas, 'Criar Dem');
                 badges += checkPerm(p.visualizar_demandas, 'Ver Dem');
                 badges += checkPerm(p.editar_demandas, 'Edit Dem');
+                if (p.ver_sigilosas) badges += `<span class="badge-sigilosa" style="margin-top:2px;"><i class="ri-lock-line"></i>Sigilosas</span> `;
                 badges += checkPerm(p.excluir_demandas, 'Exc Dem');
                 badges += checkPerm(p.criar_acoes, 'Criar Ação');
                 badges += checkPerm(p.gerenciar_cadastros, 'Cadastros');
@@ -2199,6 +2335,7 @@ const app = {
                         <label><input type="checkbox" name="p_imprimir_acoes" value="1" ${chk(p.imprimir_acoes)}> Pode Imprimir Ações</label>
                         <label><input type="checkbox" name="p_editar_acoes" value="1" ${chk(p.editar_acoes)}> Pode Editar Ações</label>
                         <label><input type="checkbox" name="p_excluir_acoes" value="1" ${chk(p.excluir_acoes)}> Pode Excluir Ações</label>
+                        <label style="grid-column:1/-1; background:#fff1f2; border:1px solid #fca5a5; border-radius:6px; padding:8px 12px;"><input type="checkbox" name="p_ver_sigilosas" value="1" ${chk(p.ver_sigilosas)}> 🔒 Pode Ver/Editar <strong>Demandas Sigilosas</strong></label>
                     </div>
                 </div>
             </form>
@@ -2233,7 +2370,8 @@ const app = {
             visualizar_acoes: !!fd.get('p_visualizar_acoes'),
             imprimir_acoes: !!fd.get('p_imprimir_acoes'),
             editar_acoes: !!fd.get('p_editar_acoes'),
-            excluir_acoes: !!fd.get('p_excluir_acoes')
+            excluir_acoes: !!fd.get('p_excluir_acoes'),
+            ver_sigilosas: !!fd.get('p_ver_sigilosas')
         };
 
         if(isEdit) {
