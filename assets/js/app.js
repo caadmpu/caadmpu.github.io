@@ -66,14 +66,10 @@ const app = {
                 this.closeModal();
                 const overlay = document.getElementById('customPopupOverlay');
                 if (overlay && overlay.classList.contains('active')) {
-                    const btns = document.getElementById('customPopupActions').querySelectorAll('button');
-                    if(btns.length > 1) {
-                        btns[1].click();
-                    } else if(btns.length === 1) {
-                        btns[0].click();
-                    } else {
-                        overlay.classList.remove('active');
-                        if(this._popupResolve) { this._popupResolve(false); this._popupResolve = null; }
+                    overlay.classList.remove('active');
+                    if(this._popupResolve) { 
+                        this._popupResolve(false); 
+                        this._popupResolve = null; 
                     }
                 }
             }
@@ -981,13 +977,26 @@ const app = {
         try {
             document.body.style.cursor = 'wait';
             let query = db.collection('demandas');
-            if(document.getElementById('filter-arquivadas').getAttribute('data-active') !== 'true') {
-                query = query.where('arquivada', '==', false);
-            } else {
+            
+            const btnArquivadas = document.getElementById('filter-arquivadas');
+            const btnLixeira = document.getElementById('filter-lixeira');
+            const isArquivadas = btnArquivadas && btnArquivadas.getAttribute('data-active') === 'true';
+            const isLixeira = btnLixeira && btnLixeira.getAttribute('data-active') === 'true';
+
+            if (isLixeira) {
+                query = query.where('excluida', '==', true);
+            } else if (isArquivadas) {
                 query = query.where('arquivada', '==', true);
+            } else {
+                query = query.where('arquivada', '==', false);
             }
+            
             const snap = await query.get();
             let demandas = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            if (!isLixeira) {
+                demandas = demandas.filter(d => d.excluida !== true);
+            }
             
             const order = document.getElementById('filter-order') ? document.getElementById('filter-order').value : 'desc';
             
@@ -1062,18 +1071,28 @@ const app = {
                     }
                 });
 
-                tdHtml += `
-                <td>
-                    ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
-                    ${this.temPermissao('editar_demandas') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>` : ''}
-                    ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
-                    ${this.temPermissao('imprimir_demandas') ? `<button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>` : ''}
-                    ${this.temPermissao('arquivar_demandas') ? (d.arquivada 
-                        ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
-                        : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
-                    ) : ''}
-                </td>
-                `;
+                if (d.excluida) {
+                    tdHtml += `
+                    <td>
+                        ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
+                        ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm btn-primary" onclick="app.restaurarDemanda('${d.id}')" title="Restaurar"><i class="ri-arrow-go-back-line"></i></button>` : ''}
+                        ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemandaDefinitivamente('${d.id}')" title="Excluir Definitivamente"><i class="ri-delete-bin-fill"></i></button>` : ''}
+                    </td>
+                    `;
+                } else {
+                    tdHtml += `
+                    <td>
+                        ${this.temPermissao('visualizar_demandas') ? `<button class="btn btn-sm btn-info" onclick="app.abrirDetalhesDemanda('${d.id}')" title="Visualizar Detalhes"><i class="ri-eye-line"></i></button>` : ''}
+                        ${this.temPermissao('editar_demandas') ? `<button class="btn btn-sm btn-secondary" onclick="app.editarDemanda('${d.id}')" title="Editar"><i class="ri-edit-line"></i></button>` : ''}
+                        ${this.temPermissao('excluir_demandas') ? `<button class="btn btn-sm" style="background:#dc2626; color:white; border:none;" onclick="app.excluirDemanda('${d.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>` : ''}
+                        ${this.temPermissao('imprimir_demandas') ? `<button class="btn btn-sm" style="background:#10b981; color:white; border:none;" onclick="app.gerarPdfDemandaNovaGuia('${d.id}')" title="Gerar PDF (Nova Guia)"><i class="ri-file-pdf-2-line"></i></button>` : ''}
+                        ${this.temPermissao('arquivar_demandas') ? (d.arquivada 
+                            ? `<button class="btn btn-sm btn-secondary" onclick="app.desarquivarDemanda('${d.id}')" title="Desarquivar"><i class="ri-inbox-unarchive-line"></i></button>`
+                            : `<button class="btn btn-sm btn-secondary" onclick="app.arquivarDemanda('${d.id}')" title="Arquivar"><i class="ri-inbox-archive-line"></i></button>`
+                        ) : ''}
+                    </td>
+                    `;
+                }
                 tr.innerHTML = tdHtml;
                 tbody.appendChild(tr);
             } catch(e) { 
@@ -1396,15 +1415,44 @@ const app = {
     // --- NOVA TELA DE DETALHES ---
     async excluirDemandaEVoltar(id) {
         if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão."); return; }
-        if(await this.showConfirm("Tem certeza que deseja excluir esta demanda definitivamente?", "Excluir", "Cancelar")) {
+        if(await this.showConfirm("Tem certeza que deseja mover esta demanda para a lixeira?", "Mover para Lixeira", "Cancelar")) {
+            try {
+                await db.collection('demandas').doc(id).update({ excluida: true, data_exclusao: new Date().toISOString() });
+                await this.showAlert("Movida para a lixeira com sucesso.");
+                this.voltarDemandas();
+            } catch(e) { console.error(e); }
+        }
+    },
+    
+    async restaurarDemanda(id) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão."); return; }
+        try {
+            await db.collection('demandas').doc(id).update({ excluida: false });
+            await this.showAlert("Demanda restaurada com sucesso!");
+            if(this.currentView === 'demanda-detalhe') {
+                this.abrirDetalhesDemanda(id);
+            } else {
+                this.carregarDemandas();
+            }
+        } catch(e) { console.error(e); }
+    },
+    
+    async excluirDemandaDefinitivamente(id) {
+        if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão."); return; }
+        if(await this.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? O histórico de ações também será apagado. Essa ação não pode ser desfeita.", "Excluir Definitivamente", "Cancelar")) {
             try {
                 await db.collection('demandas').doc(id).delete();
                 const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
                 const batch = db.batch();
                 acoes.forEach(a => batch.delete(a.ref));
                 await batch.commit();
-                await this.showAlert("Excluída com sucesso.");
-                this.voltarDemandas();
+                await this.showAlert("Excluída permanentemente com sucesso.");
+                
+                if(this.currentView === 'demanda-detalhe' && this.demandaAbertaId === id) {
+                    this.voltarDemandas();
+                } else {
+                    this.carregarDemandas();
+                }
             } catch(e) { console.error(e); }
         }
     },
@@ -1431,15 +1479,22 @@ const app = {
 
             // Preenche dados
             const actionsDiv = document.getElementById('detalhe-actions');
-            actionsDiv.innerHTML = `
-                <button class="btn btn-secondary" onclick="app.editarDemanda('${id}')"><i class="ri-edit-line"></i> Editar</button>
-                ${d.arquivada 
-                    ? `<button class="btn btn-secondary" onclick="app.desarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
-                    : `<button class="btn btn-secondary" onclick="app.arquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
-                }
-                <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
-                <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
-            `;
+            if (d.excluida) {
+                actionsDiv.innerHTML = `
+                    <button class="btn btn-primary" onclick="app.restaurarDemanda('${id}')"><i class="ri-arrow-go-back-line"></i> Restaurar</button>
+                    <button class="btn btn-danger-outline" onclick="app.excluirDemandaDefinitivamente('${id}')"><i class="ri-delete-bin-fill"></i> Excluir Definitivamente</button>
+                `;
+            } else {
+                actionsDiv.innerHTML = `
+                    <button class="btn btn-secondary" onclick="app.editarDemanda('${id}')"><i class="ri-edit-line"></i> Editar</button>
+                    ${d.arquivada 
+                        ? `<button class="btn btn-secondary" onclick="app.desarquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-unarchive-line"></i> Desarquivar</button>`
+                        : `<button class="btn btn-secondary" onclick="app.arquivarDemanda('${id}'); app.abrirDetalhesDemanda('${id}')"><i class="ri-inbox-archive-line"></i> Arquivar</button>`
+                    }
+                    <button class="btn btn-secondary" onclick="app.gerarPdfDemandaNovaGuia('${id}')"><i class="ri-printer-line"></i> Imprimir</button>
+                    <button class="btn btn-danger-outline" onclick="app.excluirDemandaEVoltar('${id}')"><i class="ri-delete-bin-line"></i> Excluir</button>
+                `;
+            }
 
             document.getElementById('detalhe-numero').innerText = `Nº ${d.numero_registro || '-'}`;
             document.getElementById('detalhe-status').innerText = d.status_nome || 'SEM STATUS';
@@ -1952,20 +2007,15 @@ const app = {
 
     async excluirDemanda(id) {
         if(!this.temPermissao('excluir_demandas')) { await this.showAlert("Sem permissão para excluir demandas."); return; }
-        if(await this.showConfirm("Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta demanda? Essa ação não pode ser desfeita.", "Excluir", "Cancelar")) {
+        if(await this.showConfirm("Tem certeza que deseja mover esta demanda para a lixeira?", "Mover para Lixeira", "Cancelar")) {
             try {
-                await db.collection('demandas').doc(id).delete();
-                // Opcional: deletar o histórico de ações também
-                const acoes = await db.collection('acoes').where('demanda_id', '==', id).get();
-                const batch = db.batch();
-                acoes.forEach(a => batch.delete(a.ref));
-                await batch.commit();
+                await db.collection('demandas').doc(id).update({ excluida: true, data_exclusao: new Date().toISOString() });
                 
-                await this.showAlert("Demanda excluída com sucesso!");
+                await this.showAlert("Demanda movida para a lixeira com sucesso!");
                 this.carregarDemandas();
             } catch(e) {
-                console.error("Erro ao excluir demanda:", e);
-                await this.showAlert("Erro ao excluir demanda.");
+                console.error("Erro ao mover para a lixeira:", e);
+                await this.showAlert("Erro ao mover demanda para a lixeira.");
             }
         }
     },

@@ -224,7 +224,8 @@
                 <select id="filter-status"><option value="">Todos Status</option></select>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                <button id="filter-arquivadas" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-arquivadas', () => app.carregarDemandas())"><i class="ri-archive-line"></i> Arquivadas</button>
+                <button id="filter-arquivadas" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-arquivadas', () => { if(document.getElementById('filter-arquivadas').getAttribute('data-active') === 'true') { document.getElementById('filter-lixeira').setAttribute('data-active', 'false'); document.getElementById('filter-lixeira').classList.remove('active'); } app.carregarDemandas(); })"><i class="ri-archive-line"></i> Arquivadas</button>
+                <button id="filter-lixeira" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-lixeira', () => { if(document.getElementById('filter-lixeira').getAttribute('data-active') === 'true') { document.getElementById('filter-arquivadas').setAttribute('data-active', 'false'); document.getElementById('filter-arquivadas').classList.remove('active'); } app.carregarDemandas(); })"><i class="ri-delete-bin-line"></i> Lixeira</button>
                 <button id="filter-com-processo" class="btn btn-sm filter-toggle" data-active="false" onclick="app.toggleFilterBtn('filter-com-processo', () => app.filtrarTabelaDemandas())"><i class="ri-file-text-line"></i> Com SIGED</button>
                 <div class="column-selector-dropdown">
                     <button class="btn btn-sm btn-secondary" onclick="app.toggleColumnSelector()"><i class="ri-layout-column-line"></i> Colunas</button>
