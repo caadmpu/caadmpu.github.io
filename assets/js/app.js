@@ -48,6 +48,7 @@ const app = {
         currentPage: 1,
         itemsPerPage: 10
     },
+    savedFilters: {},
 
     init() {
         this.initColunasVisiveis();
@@ -58,6 +59,24 @@ const app = {
         // Modal events
         document.getElementById('globalModal').addEventListener('click', (e) => {
             if (e.target.id === 'globalModal') this.closeModal();
+        });
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeModal();
+                const overlay = document.getElementById('customPopupOverlay');
+                if (overlay && overlay.classList.contains('active')) {
+                    const btns = document.getElementById('customPopupActions').querySelectorAll('button');
+                    if(btns.length > 1) {
+                        btns[1].click();
+                    } else if(btns.length === 1) {
+                        btns[0].click();
+                    } else {
+                        overlay.classList.remove('active');
+                        if(this._popupResolve) { this._popupResolve(false); this._popupResolve = null; }
+                    }
+                }
+            }
         });
         
         // Monitora o status de login via Firebase Auth
@@ -895,13 +914,41 @@ const app = {
     // --- DEMANDAS ---
     async initDemandas() {
         await this.loadFiltrosDemandas();
+        
+        // Restore filters
+        if(this.savedFilters.demandas) {
+            const f = this.savedFilters.demandas;
+            if(document.getElementById('filter-search')) document.getElementById('filter-search').value = f.search || '';
+            if(document.getElementById('filter-coordenadoria')) document.getElementById('filter-coordenadoria').value = f.coord || '';
+            if(document.getElementById('filter-escola')) document.getElementById('filter-escola').value = f.escola || '';
+            if(document.getElementById('filter-tipo')) document.getElementById('filter-tipo').value = f.tipo || '';
+            if(document.getElementById('filter-status')) document.getElementById('filter-status').value = f.status || '';
+            if(document.getElementById('filter-data-inicio')) document.getElementById('filter-data-inicio').value = f.dataInicio || '';
+            if(document.getElementById('filter-data-fim')) document.getElementById('filter-data-fim').value = f.dataFim || '';
+        }
+        
         this.carregarDemandas();
         
-        document.getElementById('filter-search').addEventListener('input', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-coordenadoria').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-escola').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-tipo').addEventListener('change', () => this.filtrarTabelaDemandas());
-        document.getElementById('filter-status').addEventListener('change', () => this.filtrarTabelaDemandas());
+        const saveAndFilter = () => {
+            this.savedFilters.demandas = {
+                search: document.getElementById('filter-search') ? document.getElementById('filter-search').value : '',
+                coord: document.getElementById('filter-coordenadoria') ? document.getElementById('filter-coordenadoria').value : '',
+                escola: document.getElementById('filter-escola') ? document.getElementById('filter-escola').value : '',
+                tipo: document.getElementById('filter-tipo') ? document.getElementById('filter-tipo').value : '',
+                status: document.getElementById('filter-status') ? document.getElementById('filter-status').value : '',
+                dataInicio: document.getElementById('filter-data-inicio') ? document.getElementById('filter-data-inicio').value : '',
+                dataFim: document.getElementById('filter-data-fim') ? document.getElementById('filter-data-fim').value : '',
+            };
+            this.filtrarTabelaDemandas();
+        };
+
+        const fSearch = document.getElementById('filter-search');
+        if(fSearch) fSearch.addEventListener('input', saveAndFilter);
+        
+        ['filter-coordenadoria','filter-escola','filter-tipo','filter-status','filter-data-inicio','filter-data-fim'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('change', saveAndFilter);
+        });
     },
 
     async loadFiltrosDemandas() {
@@ -1045,6 +1092,8 @@ const app = {
         const tipo = document.getElementById('filter-tipo').value;
         const status = document.getElementById('filter-status').value;
         const coord = document.getElementById('filter-coordenadoria').value;
+        const dataInicio = document.getElementById('filter-data-inicio') ? document.getElementById('filter-data-inicio').value : '';
+        const dataFim = document.getElementById('filter-data-fim') ? document.getElementById('filter-data-fim').value : '';
         
         let filtradas = window.todasDemandas.filter(d => {
             // Filtro de demandas sigilosas
@@ -1058,7 +1107,22 @@ const app = {
             const matchTipo = tipo ? d.tipo_nome === tipo : true;
             const matchStatus = status ? d.status_nome === status : true;
             const matchCoord = coord ? d.coordenadoria_nome === coord : true;
-            return matchTerm && matchProc && matchEscola && matchTipo && matchStatus && matchCoord;
+            
+            let matchData = true;
+            if (dataInicio || dataFim) {
+                // Formato assumido para data_registro: YYYY-MM-DDTHH:mm...
+                const dData = new Date(d.data_registro);
+                if (dataInicio) {
+                    const dtIni = new Date(dataInicio + 'T00:00:00');
+                    if (dData < dtIni) matchData = false;
+                }
+                if (dataFim) {
+                    const dtFim = new Date(dataFim + 'T23:59:59');
+                    if (dData > dtFim) matchData = false;
+                }
+            }
+
+            return matchTerm && matchProc && matchEscola && matchTipo && matchStatus && matchCoord && matchData;
         });
         
         if (this.userDoc && this.userDoc.role === 'COMUM' && this.userDoc.coordenadoria_nome !== 'REGIONAL / GABINETE') {

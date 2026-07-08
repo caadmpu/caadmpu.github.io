@@ -77,6 +77,10 @@
     color: var(--text-main);
 }
 
+[data-theme="dark"] .detalhe-item label {
+    color: var(--text-muted);
+}
+
 [data-theme="dark"] .detalhe-item span {
     color: var(--text-main);
 }
@@ -122,6 +126,7 @@
 }
 
 [data-theme="dark"] .filters input[type="text"],
+[data-theme="dark"] .filters input[type="date"],
 [data-theme="dark"] .filters select {
     background: var(--surface);
     color: var(--text-main);

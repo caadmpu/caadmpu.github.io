@@ -213,6 +213,11 @@
                     <option value="desc">Data de Criação (Decrescente)</option>
                     <option value="asc">Data de Criação (Crescente)</option>
                 </select>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <label style="font-size: 12px; color: var(--text-muted);">Período:</label>
+                    <input type="date" id="filter-data-inicio" title="Data Inicial" style="padding: 6px; border-radius: 4px; border: 1px solid var(--border);">
+                    <input type="date" id="filter-data-fim" title="Data Final" style="padding: 6px; border-radius: 4px; border: 1px solid var(--border);">
+                </div>
                 <select id="filter-coordenadoria"><option value="">Todas Coordenações</option></select>
                 <select id="filter-escola"><option value="">Todas Escolas</option></select>
                 <select id="filter-tipo"><option value="">Todos Tipos</option></select>
@@ -485,6 +490,10 @@
                         <li><strong>Esterlane de Lima Palheta</strong> - Coordenadora Regional de Educação</li>
                     </ul>
                 </div>
+                
+                <p style="text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 25px;">
+                    <strong>Data de Criação do Sistema:</strong> 12/06/2026
+                </p>
                 
                 <div class="alert" style="background: #fee2e2; border-left: 4px solid #ef4444; color: #991b1b; padding: 15px; border-radius: 4px; text-align: left; font-size: 13px;">
                     <strong>IMPORTANTE!!!</strong><br>
