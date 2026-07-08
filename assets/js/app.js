@@ -82,6 +82,17 @@ const app = {
                         btns[btns.length - 1].click();
                     }
                 }
+            } else if (e.key === 'Backspace') {
+                const tag = e.target ? e.target.tagName : '';
+                const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
+                const isGlobalModalActive = document.getElementById('globalModal') && document.getElementById('globalModal').style.display === 'flex';
+                
+                if (!isInput && !isPopupActive && !isGlobalModalActive) {
+                    if (this.currentView === 'demanda-detalhe') {
+                        e.preventDefault();
+                        this.voltarDemandas();
+                    }
+                }
             }
         });
         
