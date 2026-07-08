@@ -62,14 +62,24 @@ const app = {
         });
         
         window.addEventListener('keydown', (e) => {
+            const overlay = document.getElementById('customPopupOverlay');
+            const isPopupActive = overlay && overlay.classList.contains('active');
+            
             if (e.key === 'Escape') {
                 this.closeModal();
-                const overlay = document.getElementById('customPopupOverlay');
-                if (overlay && overlay.classList.contains('active')) {
+                if (isPopupActive) {
                     overlay.classList.remove('active');
                     if(this._popupResolve) { 
                         this._popupResolve(false); 
                         this._popupResolve = null; 
+                    }
+                }
+            } else if (e.key === 'Enter') {
+                if (isPopupActive) {
+                    e.preventDefault();
+                    const btns = document.getElementById('customPopupActions').querySelectorAll('button');
+                    if (btns.length > 0) {
+                        btns[0].click();
                     }
                 }
             }
