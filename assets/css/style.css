@@ -870,15 +870,15 @@ body {
 }
 .demanda-detalhe-actions .btn {
     border-radius: var(--radius-md);
-    background: white;
-    color: var(--text-color);
+    background: var(--surface);
+    color: var(--text-main);
     border: 1px solid var(--border);
     padding: 8px 16px;
     font-weight: 500;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .demanda-detalhe-actions .btn:hover {
-    background: #f8fafc;
+    background: var(--background);
 }
 .demanda-detalhe-actions .btn-danger-outline {
     background: var(--danger-color);
