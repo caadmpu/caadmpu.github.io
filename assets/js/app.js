@@ -79,7 +79,7 @@ const app = {
                     e.preventDefault();
                     const btns = document.getElementById('customPopupActions').querySelectorAll('button');
                     if (btns.length > 0) {
-                        btns[0].click();
+                        btns[btns.length - 1].click();
                     }
                 }
             }
