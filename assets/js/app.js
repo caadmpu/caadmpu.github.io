@@ -2933,8 +2933,10 @@ const app = {
             const snap = await db.collection('agendas_demandas').orderBy('criado_em', 'desc').get();
             let html = '';
             
+            app._agendasCache = {};
             snap.forEach(doc => {
                 const a = doc.data();
+                app._agendasCache[doc.id] = a;
                 if (search && (!a.titulo?.toLowerCase().includes(search) && !a.responsavel_sede?.toLowerCase().includes(search))) return;
                 
                 const dataFormatada = a.data ? a.data.split('-').reverse().join('/') : '-';
@@ -2946,6 +2948,7 @@ const app = {
                         <td>${a.responsavel_sede || '-'}</td>
                         <td>
                             <button class="btn btn-sm btn-primary" onclick="app.abrirAgendaDetalhes('${doc.id}')" title="Ver Itens"><i class="ri-list-check-2"></i></button>
+                            <button class="btn btn-sm btn-secondary" onclick="app.openModalNovaAgenda('${doc.id}')" title="Editar Agenda"><i class="ri-edit-line"></i></button>
                             <button class="btn btn-sm btn-danger" onclick="app.excluirAgenda('${doc.id}')" title="Excluir Agenda"><i class="ri-delete-bin-line"></i></button>
                         </td>
                     </tr>
@@ -2958,42 +2961,62 @@ const app = {
         }
     },
 
-    openModalNovaAgenda() {
+    openModalNovaAgenda(id = null) {
+        let a = {};
+        if (id && this._agendasCache && this._agendasCache[id]) {
+            a = this._agendasCache[id];
+        }
         const html = `
-            <form onsubmit="event.preventDefault(); app.salvarAgenda();">
+            <form onsubmit="event.preventDefault(); app.salvarAgenda('${id || ''}');">
                 <div class="form-group">
                     <label>Título (Opcional)</label>
-                    <input type="text" id="form-agenda-titulo" class="form-control" placeholder="Ex: Despacho com Secretário">
+                    <input type="text" id="form-agenda-titulo" class="form-control" placeholder="Ex: Despacho com Secretário" value="${a.titulo || ''}">
                 </div>
                 <div class="form-group">
                     <label>Data (Opcional)</label>
-                    <input type="date" id="form-agenda-data" class="form-control">
+                    <input type="date" id="form-agenda-data" class="form-control" value="${a.data || ''}">
                 </div>
                 <div class="form-group">
                     <label>Setor ou Pessoa Responsável da SEDE (Opcional)</label>
-                    <input type="text" id="form-agenda-responsavel" class="form-control">
+                    <input type="text" id="form-agenda-responsavel" class="form-control" value="${a.responsavel_sede || ''}">
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Salvar Agenda</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">${id ? 'Atualizar Agenda' : 'Salvar Agenda'}</button>
             </form>
         `;
-        this.openModal('Nova Agenda de Demandas', html);
+        this.openModal(id ? 'Editar Agenda' : 'Nova Agenda de Demandas', html);
     },
 
-    async salvarAgenda() {
+    async salvarAgenda(idStr) {
+        const id = idStr ? idStr : null;
         const titulo = document.getElementById('form-agenda-titulo').value;
         const data = document.getElementById('form-agenda-data').value;
         const resp = document.getElementById('form-agenda-responsavel').value;
         
         try {
-            await db.collection('agendas_demandas').add({
-                titulo,
-                data,
-                responsavel_sede: resp,
-                criado_em: new Date().toISOString()
-            });
+            if (id) {
+                await db.collection('agendas_demandas').doc(id).update({
+                    titulo,
+                    data,
+                    responsavel_sede: resp,
+                    atualizado_em: new Date().toISOString()
+                });
+                this.showAlert("Agenda atualizada com sucesso!");
+                
+                // Se estamos com os detalhes abertos, recarrega
+                if (this.agendaAtivaId === id) {
+                    this.initAgendaDemandasItens();
+                }
+            } else {
+                await db.collection('agendas_demandas').add({
+                    titulo,
+                    data,
+                    responsavel_sede: resp,
+                    criado_em: new Date().toISOString()
+                });
+                this.showAlert("Agenda criada com sucesso!");
+            }
             this.closeModal();
             this.carregarAgendas();
-            this.showAlert("Agenda criada com sucesso!");
         } catch (e) {
             console.error(e);
             this.showAlert("Erro ao salvar agenda.");
@@ -3064,8 +3087,10 @@ const app = {
             let html = '';
             let pdfHtml = '';
             
+            app._itensAgendaCache = {};
             snap.forEach(doc => {
                 const i = doc.data();
+                app._itensAgendaCache[doc.id] = i;
                 const dataForm = i.data_inicial ? i.data_inicial.split('-').reverse().join('/') : '-';
                 
                 // HTML da tela
@@ -3078,6 +3103,7 @@ const app = {
                         <td style="white-space:pre-wrap;">${i.situacao || '-'}</td>
                         <td style="white-space:pre-wrap;">${i.despachos || '-'}</td>
                         <td class="no-print">
+                            <button class="btn btn-sm btn-secondary" onclick="app.openModalNovoItemAgenda('${doc.id}')" title="Editar Item"><i class="ri-edit-line"></i></button>
                             <button class="btn btn-sm btn-danger" onclick="app.excluirItemAgenda('${doc.id}')" title="Excluir Item"><i class="ri-delete-bin-line"></i></button>
                         </td>
                     </tr>
@@ -3104,42 +3130,47 @@ const app = {
         }
     },
 
-    openModalNovoItemAgenda() {
+    openModalNovoItemAgenda(id = null) {
+        let i = {};
+        if (id && this._itensAgendaCache && this._itensAgendaCache[id]) {
+            i = this._itensAgendaCache[id];
+        }
         const html = `
-            <form onsubmit="event.preventDefault(); app.salvarItemAgenda();">
+            <form onsubmit="event.preventDefault(); app.salvarItemAgenda('${id || ''}');">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Data Inicial</label>
-                        <input type="date" id="form-item-data" class="form-control">
+                        <input type="date" id="form-item-data" class="form-control" value="${i.data_inicial || ''}">
                     </div>
                     <div class="form-group">
                         <label>Número do Processo</label>
-                        <input type="text" id="form-item-processo" class="form-control">
+                        <input type="text" id="form-item-processo" class="form-control" value="${i.processo || ''}">
                     </div>
                 </div>
                 <div class="form-group">
                         <label>Escola Demandante</label>
-                        <input type="text" id="form-item-escola" class="form-control" placeholder="Liste as escolas envolvidas">
+                        <input type="text" id="form-item-escola" class="form-control" placeholder="Liste as escolas envolvidas" value="${i.escola || ''}">
                 </div>
                 <div class="form-group">
                     <label>Descrição da Demanda</label>
-                    <textarea id="form-item-descricao" class="form-control" rows="2"></textarea>
+                    <textarea id="form-item-descricao" class="form-control" rows="2">${i.descricao || ''}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Situação da Demanda</label>
-                    <textarea id="form-item-situacao" class="form-control" rows="2"></textarea>
+                    <textarea id="form-item-situacao" class="form-control" rows="2">${i.situacao || ''}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Despachos</label>
-                    <textarea id="form-item-despachos" class="form-control" rows="2"></textarea>
+                    <textarea id="form-item-despachos" class="form-control" rows="2">${i.despachos || ''}</textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Adicionar Item</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">${id ? 'Atualizar Item' : 'Adicionar Item'}</button>
             </form>
         `;
-        this.openModal('Novo Item na Agenda', html);
+        this.openModal(id ? 'Editar Item da Agenda' : 'Novo Item na Agenda', html);
     },
 
-    async salvarItemAgenda() {
+    async salvarItemAgenda(idStr) {
+        const id = idStr ? idStr : null;
         const data = document.getElementById('form-item-data').value;
         const processo = document.getElementById('form-item-processo').value;
         const escola = document.getElementById('form-item-escola').value;
@@ -3148,15 +3179,27 @@ const app = {
         const despachos = document.getElementById('form-item-despachos').value;
         
         try {
-            await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').add({
-                data_inicial: data,
-                processo,
-                escola,
-                descricao,
-                situacao,
-                despachos,
-                criado_em: new Date().toISOString()
-            });
+            if (id) {
+                await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').doc(id).update({
+                    data_inicial: data,
+                    processo,
+                    escola,
+                    descricao,
+                    situacao,
+                    despachos,
+                    atualizado_em: new Date().toISOString()
+                });
+            } else {
+                await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').add({
+                    data_inicial: data,
+                    processo,
+                    escola,
+                    descricao,
+                    situacao,
+                    despachos,
+                    criado_em: new Date().toISOString()
+                });
+            }
             this.closeModal();
             this.carregarItensAgenda();
         } catch (e) {
