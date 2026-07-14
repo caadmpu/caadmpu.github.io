@@ -327,6 +327,14 @@ const app = {
             document.getElementById('menu-usuarios').style.display = 'none';
         }
         
+        if (this.userDoc.role === 'ADM' || this.temPermissao('acessar_agenda_demandas')) {
+            const menuAgenda = document.getElementById('menu-agenda-demandas');
+            if (menuAgenda) menuAgenda.style.display = 'flex';
+        } else {
+            const menuAgenda = document.getElementById('menu-agenda-demandas');
+            if (menuAgenda) menuAgenda.style.display = 'none';
+        }
+        
         this.loadView(this.currentView);
     },
 
@@ -404,6 +412,9 @@ const app = {
         if (view === 'cadastros' && !this.temPermissao('gerenciar_cadastros')) {
             await this.showAlert("Sem permissão para visualizar cadastros."); return;
         }
+        if ((view === 'agenda_demandas' || view === 'agenda_demandas_itens') && (!this.userDoc || (this.userDoc.role !== 'ADM' && !this.temPermissao('acessar_agenda_demandas')))) {
+            await this.showAlert("Sem permissão para acessar a Agenda de Demandas."); return;
+        }
 
         this.currentView = view;
         const container = document.getElementById('contentArea');
@@ -418,6 +429,8 @@ const app = {
             'cadastros': 'Cadastros Básicos',
             'usuarios': 'Gerenciamento de Usuários',
             'contatos': 'Agenda de Contatos',
+            'agenda_demandas': 'Agenda de Demandas',
+            'agenda_demandas_itens': 'Itens da Agenda',
             'sugestoes': 'Sugestões',
             'creditos': 'Créditos'
         };
@@ -431,6 +444,8 @@ const app = {
         if (view === 'usuarios') this.initUsuarios();
         if (view === 'contatos') this.initContatos();
         if (view === 'sugestoes') this.initSugestoes();
+        if (view === 'agenda_demandas') this.initAgendaDemandas();
+        if (view === 'agenda_demandas_itens') this.initAgendaDemandasItens();
     },
 
     refreshView() {
@@ -458,6 +473,8 @@ const app = {
             'usuarios':        () => this.initUsuarios(),
             'contatos':        () => this.initContatos(),
             'sugestoes':       () => this.initSugestoes(),
+            'agenda_demandas': () => this.initAgendaDemandas(),
+            'agenda_demandas_itens': () => this.initAgendaDemandasItens(),
             'demanda-detalhe': () => this.abrirDetalhesDemanda(this.demandaAbertaId),
         };
 
@@ -2899,6 +2916,292 @@ const app = {
         if(await this.showConfirm("Apagar esta sugestão?", "Apagar", "Cancelar")) {
             await db.collection('sugestoes').doc(id).delete();
             this.carregarSugestoes();
+        }
+    },
+
+    // --- AGENDA DE DEMANDAS ---
+    initAgendaDemandas() {
+        this.carregarAgendas();
+    },
+
+    async carregarAgendas() {
+        const tbody = document.getElementById('agendas-tbody');
+        if (!tbody) return;
+        const search = (document.getElementById('filter-agendas-search')?.value || '').toLowerCase();
+        
+        try {
+            const snap = await db.collection('agendas_demandas').orderBy('criado_em', 'desc').get();
+            let html = '';
+            
+            snap.forEach(doc => {
+                const a = doc.data();
+                if (search && (!a.titulo?.toLowerCase().includes(search) && !a.responsavel_sede?.toLowerCase().includes(search))) return;
+                
+                const dataFormatada = a.data ? a.data.split('-').reverse().join('/') : '-';
+                
+                html += `
+                    <tr>
+                        <td><strong>${a.titulo || 'Sem Título'}</strong></td>
+                        <td>${dataFormatada}</td>
+                        <td>${a.responsavel_sede || '-'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="app.abrirAgendaDetalhes('${doc.id}')" title="Ver Itens"><i class="ri-list-check-2"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="app.excluirAgenda('${doc.id}')" title="Excluir Agenda"><i class="ri-delete-bin-line"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="4" style="text-align:center;">Nenhuma agenda encontrada.</td></tr>';
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Erro ao carregar agendas.</td></tr>';
+        }
+    },
+
+    openModalNovaAgenda() {
+        const html = `
+            <form onsubmit="event.preventDefault(); app.salvarAgenda();">
+                <div class="form-group">
+                    <label>Título (Opcional)</label>
+                    <input type="text" id="form-agenda-titulo" class="form-control" placeholder="Ex: Despacho com Secretário">
+                </div>
+                <div class="form-group">
+                    <label>Data (Opcional)</label>
+                    <input type="date" id="form-agenda-data" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Setor ou Pessoa Responsável da SEDE (Opcional)</label>
+                    <input type="text" id="form-agenda-responsavel" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Salvar Agenda</button>
+            </form>
+        `;
+        this.openModal('Nova Agenda de Demandas', html);
+    },
+
+    async salvarAgenda() {
+        const titulo = document.getElementById('form-agenda-titulo').value;
+        const data = document.getElementById('form-agenda-data').value;
+        const resp = document.getElementById('form-agenda-responsavel').value;
+        
+        try {
+            await db.collection('agendas_demandas').add({
+                titulo,
+                data,
+                responsavel_sede: resp,
+                criado_em: new Date().toISOString()
+            });
+            this.closeModal();
+            this.carregarAgendas();
+            this.showAlert("Agenda criada com sucesso!");
+        } catch (e) {
+            console.error(e);
+            this.showAlert("Erro ao salvar agenda.");
+        }
+    },
+
+    async excluirAgenda(id) {
+        if(await this.showConfirm("Excluir esta agenda e todos os seus itens permanentemente?", "Excluir", "Cancelar")) {
+            try {
+                // Delete items
+                const itensSnap = await db.collection('agendas_demandas').doc(id).collection('itens').get();
+                const batch = db.batch();
+                itensSnap.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                // Delete agenda
+                await db.collection('agendas_demandas').doc(id).delete();
+                this.carregarAgendas();
+            } catch (e) {
+                console.error(e);
+                this.showAlert("Erro ao excluir agenda.");
+            }
+        }
+    },
+
+    async abrirAgendaDetalhes(id) {
+        this.agendaAtivaId = id;
+        this.loadView('agenda_demandas_itens');
+    },
+
+    async initAgendaDemandasItens() {
+        if (!this.agendaAtivaId) {
+            this.loadView('agenda_demandas');
+            return;
+        }
+        
+        try {
+            const doc = await db.collection('agendas_demandas').doc(this.agendaAtivaId).get();
+            if (doc.exists) {
+                this.agendaAtivaData = doc.data();
+                document.getElementById('agenda-titulo-display').innerText = this.agendaAtivaData.titulo || 'Agenda sem título';
+                document.getElementById('agenda-data-display').innerText = this.agendaAtivaData.data ? this.agendaAtivaData.data.split('-').reverse().join('/') : '-';
+                document.getElementById('agenda-responsavel-display').innerText = this.agendaAtivaData.responsavel_sede || '-';
+                
+                // Prepara headers do PDF
+                document.getElementById('pdf-agenda-titulo').innerText = this.agendaAtivaData.titulo || 'Agenda de Demandas';
+                document.getElementById('pdf-agenda-data').innerText = this.agendaAtivaData.data ? this.agendaAtivaData.data.split('-').reverse().join('/') : '-';
+                document.getElementById('pdf-agenda-responsavel').innerText = this.agendaAtivaData.responsavel_sede || '-';
+                
+                this.carregarItensAgenda();
+            } else {
+                this.loadView('agenda_demandas');
+            }
+        } catch (e) {
+            console.error(e);
+            this.showAlert("Erro ao carregar dados da agenda.");
+        }
+    },
+
+    async carregarItensAgenda() {
+        const tbody = document.getElementById('agenda-itens-tbody');
+        const pdfTbody = document.getElementById('pdf-agenda-itens-tbody');
+        if (!tbody) return;
+        
+        try {
+            const snap = await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').orderBy('criado_em', 'asc').get();
+            let html = '';
+            let pdfHtml = '';
+            
+            snap.forEach(doc => {
+                const i = doc.data();
+                const dataForm = i.data_inicial ? i.data_inicial.split('-').reverse().join('/') : '-';
+                
+                // HTML da tela
+                html += `
+                    <tr>
+                        <td style="white-space:nowrap;">${dataForm}</td>
+                        <td style="white-space:pre-wrap;">${i.descricao || '-'}</td>
+                        <td style="white-space:pre-wrap;">${i.escola || '-'}</td>
+                        <td>${i.processo || '-'}</td>
+                        <td style="white-space:pre-wrap;">${i.situacao || '-'}</td>
+                        <td style="white-space:pre-wrap;">${i.despachos || '-'}</td>
+                        <td class="no-print">
+                            <button class="btn btn-sm btn-danger" onclick="app.excluirItemAgenda('${doc.id}')" title="Excluir Item"><i class="ri-delete-bin-line"></i></button>
+                        </td>
+                    </tr>
+                `;
+                
+                // HTML do PDF
+                pdfHtml += `
+                    <tr>
+                        <td style="border: 1px solid #000; padding: 6px;">${dataForm}</td>
+                        <td style="border: 1px solid #000; padding: 6px; white-space:pre-wrap;">${i.descricao || '-'}</td>
+                        <td style="border: 1px solid #000; padding: 6px; white-space:pre-wrap;">${i.escola || '-'}</td>
+                        <td style="border: 1px solid #000; padding: 6px;">${i.processo || '-'}</td>
+                        <td style="border: 1px solid #000; padding: 6px; white-space:pre-wrap;">${i.situacao || '-'}</td>
+                        <td style="border: 1px solid #000; padding: 6px; white-space:pre-wrap;">${i.despachos || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html || '<tr><td colspan="7" style="text-align:center;">Nenhum item adicionado a esta agenda.</td></tr>';
+            pdfTbody.innerHTML = pdfHtml;
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Erro ao carregar itens.</td></tr>';
+        }
+    },
+
+    openModalNovoItemAgenda() {
+        const html = `
+            <form onsubmit="event.preventDefault(); app.salvarItemAgenda();">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Data Inicial</label>
+                        <input type="date" id="form-item-data" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Número do Processo</label>
+                        <input type="text" id="form-item-processo" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                        <label>Escola Demandante</label>
+                        <input type="text" id="form-item-escola" class="form-control" placeholder="Liste as escolas envolvidas">
+                </div>
+                <div class="form-group">
+                    <label>Descrição da Demanda</label>
+                    <textarea id="form-item-descricao" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Situação da Demanda</label>
+                    <textarea id="form-item-situacao" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Despachos</label>
+                    <textarea id="form-item-despachos" class="form-control" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Adicionar Item</button>
+            </form>
+        `;
+        this.openModal('Novo Item na Agenda', html);
+    },
+
+    async salvarItemAgenda() {
+        const data = document.getElementById('form-item-data').value;
+        const processo = document.getElementById('form-item-processo').value;
+        const escola = document.getElementById('form-item-escola').value;
+        const descricao = document.getElementById('form-item-descricao').value;
+        const situacao = document.getElementById('form-item-situacao').value;
+        const despachos = document.getElementById('form-item-despachos').value;
+        
+        try {
+            await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').add({
+                data_inicial: data,
+                processo,
+                escola,
+                descricao,
+                situacao,
+                despachos,
+                criado_em: new Date().toISOString()
+            });
+            this.closeModal();
+            this.carregarItensAgenda();
+        } catch (e) {
+            console.error(e);
+            this.showAlert("Erro ao adicionar item.");
+        }
+    },
+
+    async excluirItemAgenda(idItem) {
+        if(await this.showConfirm("Remover este item da agenda?", "Remover", "Cancelar")) {
+            try {
+                await db.collection('agendas_demandas').doc(this.agendaAtivaId).collection('itens').doc(idItem).delete();
+                this.carregarItensAgenda();
+            } catch (e) {
+                console.error(e);
+                this.showAlert("Erro ao remover item.");
+            }
+        }
+    },
+
+    async imprimirAgenda() {
+        const element = document.getElementById('agenda-pdf-container');
+        if (!element) return;
+        
+        // Exibe temporariamente para o html2pdf capturar
+        element.style.display = 'block';
+        element.style.position = 'absolute';
+        element.style.left = '-9999px';
+        
+        const opt = {
+            margin:       [10, 10, 10, 10], // top, left, bottom, right
+            filename:     \`Agenda_${this.agendaAtivaData?.titulo || 'Demandas'}.pdf\`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        };
+        
+        try {
+            const pdfBlobUrl = await html2pdf().from(element.firstElementChild).set(opt).output('bloburl');
+            window.open(pdfBlobUrl, '_blank');
+        } catch (e) {
+            console.error(e);
+            this.showAlert("Erro ao gerar PDF.");
+        } finally {
+            element.style.display = 'none';
         }
     }
 };

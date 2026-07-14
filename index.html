@@ -95,6 +95,7 @@
                     <li data-view="cadastros"><i class="ri-settings-4-line"></i> Tabelas Base</li>
                     <li id="menu-usuarios" style="display:none;" data-view="usuarios"><i class="ri-user-settings-line"></i> Usuários</li>
                     <li data-view="contatos"><i class="ri-contacts-book-line"></i> Agenda de Contatos</li>
+                    <li id="menu-agenda-demandas" style="display:none;" data-view="agenda_demandas"><i class="ri-calendar-todo-line"></i> Agenda de Demandas</li>
                     <li data-view="sugestoes"><i class="ri-lightbulb-line"></i> Sugestões</li>
                     <li data-view="creditos"><i class="ri-info-card-line"></i> Créditos</li>
                 </ul>
@@ -444,6 +445,109 @@
         </div>
         <div id="contatos-grid" class="contatos-grid">
             <!-- Cartões injetados via JS -->
+        </div>
+    </template>
+
+    <!-- View: Agenda de Demandas (Lista de Agendas) -->
+    <template id="view-agenda_demandas">
+        <div class="toolbar">
+            <div class="filters">
+                <input type="text" id="filter-agendas-search" placeholder="Buscar agenda..." oninput="app.carregarAgendas()">
+            </div>
+            <button class="btn btn-primary" onclick="app.openModalNovaAgenda()"><i class="ri-add-line"></i> Nova Agenda</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Título</th>
+                        <th>Data</th>
+                        <th>Responsável SEDE</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="agendas-tbody">
+                    <!-- Linhas injetadas via JS -->
+                </tbody>
+            </table>
+        </div>
+    </template>
+
+    <!-- View: Itens da Agenda de Demandas -->
+    <template id="view-agenda_demandas_itens">
+        <div class="demanda-detalhe-container">
+            <div class="demanda-detalhe-header">
+                <button class="btn btn-voltar" onclick="app.loadView('agenda_demandas')"><i class="ri-arrow-left-line"></i> Voltar às Agendas</button>
+                <div class="demanda-detalhe-actions">
+                    <button class="btn btn-primary" onclick="app.openModalNovoItemAgenda()"><i class="ri-add-line"></i> Novo Item</button>
+                    <button class="btn btn-secondary" onclick="app.imprimirAgenda()"><i class="ri-printer-line"></i> Imprimir / PDF</button>
+                </div>
+            </div>
+
+            <!-- Dados da Agenda -->
+            <div class="card detalhe-card" style="margin-bottom: 20px;">
+                <h2 class="detalhe-titulo" id="agenda-titulo-display">-</h2>
+                <div class="detalhe-grid">
+                    <div class="detalhe-item">
+                        <label>Data</label>
+                        <span id="agenda-data-display">-</span>
+                    </div>
+                    <div class="detalhe-item">
+                        <label>Responsável SEDE</label>
+                        <span id="agenda-responsavel-display">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Data Inicial</th>
+                            <th>Descrição da Demanda</th>
+                            <th>Escola Demandante</th>
+                            <th>Número do Processo</th>
+                            <th>Situação da Demanda</th>
+                            <th>Despachos</th>
+                            <th class="no-print">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agenda-itens-tbody">
+                        <!-- Linhas injetadas via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Conteiner oculto para o PDF -->
+        <div id="agenda-pdf-container" style="display: none;">
+            <div id="agenda-pdf-content" style="padding: 20px; font-family: 'Inter', sans-serif; color: #000; background: #fff; font-size: 11px;">
+                <!-- Cabeçalho -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="assets/img/brasao.png" style="max-height: 80px;" alt="Brasão do Estado do Amazonas">
+                    <h2 style="font-size: 16px; margin: 10px 0 5px 0;">GOVERNO DO ESTADO DO AMAZONAS</h2>
+                    <h3 style="font-size: 14px; margin: 0 0 15px 0; font-weight: normal;">SECRETARIA DE ESTADO DE EDUCAÇÃO E DESPORTO ESCOLAR</h3>
+                    <h4 style="font-size: 16px; margin: 0; text-transform: uppercase;" id="pdf-agenda-titulo">Agenda de Demandas</h4>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Data:</strong> <span id="pdf-agenda-data"></span> | <strong>Responsável:</strong> <span id="pdf-agenda-responsavel"></span></p>
+                </div>
+
+                <!-- Tabela -->
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Data Inicial</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Descrição da Demanda</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Escola Demandante</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Número do Processo</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Situação da Demanda</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-align: left; background: #f0f0f0;">Despachos</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pdf-agenda-itens-tbody">
+                        <!-- Itens do PDF -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </template>
 
