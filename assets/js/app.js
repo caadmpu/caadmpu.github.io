@@ -2977,7 +2977,7 @@ const app = {
                     <input type="date" id="form-agenda-data" class="form-control" value="${a.data || ''}">
                 </div>
                 <div class="form-group">
-                    <label>Setor ou Pessoa Responsável da SEDE (Opcional)</label>
+                    <label>Setor ou Deliberador (Opcional)</label>
                     <input type="text" id="form-agenda-responsavel" class="form-control" value="${a.responsavel_sede || ''}">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">${id ? 'Atualizar Agenda' : 'Salvar Agenda'}</button>
